@@ -61,12 +61,12 @@ model-catalogue/
 
 ### **Module 1.1: Database Design & Setup**
 
-**Duration:** 2 hours  
-**Learning Goals:** Relational database design, PostgreSQL, Docker basics
+**Duration:** 2 hours
+**Learning Goals:** Relational database design, PostgreSQL, Supabase setup
 
 **What you'll build:**
 
-- Docker Compose setup for local PostgreSQL
+- Supabase project creation and configuration
 - Database schema design with proper normalization
 - Initial migration with Alembic
 
@@ -454,15 +454,15 @@ src/
 
 ### **Module 6.1: Docker Configuration**
 
-**Duration:** 2 hours  
+**Duration:** 1.5 hours
 **Learning Goals:** Docker, multi-stage builds, docker-compose
 
 **What you'll build:**
 
 - Optimized Dockerfiles for backend/frontend
-- Docker Compose orchestration
-- Volume management for persistence
-- Environment configuration
+- Docker Compose orchestration (backend + frontend only)
+- Environment configuration for Supabase connection
+- Health checks
 
 **Best Practices:**
 
@@ -471,27 +471,29 @@ src/
 - Security hardening
 - Health checks
 
+**Note:** No PostgreSQL container needed - database is hosted on Supabase.
+
 ---
 
 ### **Module 6.2: Production Deployment**
 
-**Duration:** 3 hours  
-**Learning Goals:** VPS deployment, SSL, monitoring, backups
+**Duration:** 2.5 hours
+**Learning Goals:** VPS deployment, SSL, monitoring
 
 **What you'll build:**
 
 - Deployment script
 - Nginx/Caddy reverse proxy
 - SSL with Let's Encrypt
-- Database backup strategy
 - Basic monitoring/logging
+- Supabase production project configuration
 
 **Best Practices:**
 
 - Zero-downtime deployments
-- Automated backups
 - Log aggregation
 - Security hardening (firewall, secrets management)
+- Supabase automatic backups (built-in)
 
 ---
 
@@ -524,5 +526,7 @@ Throughout all modules, you'll learn:
 
 ## **Estimated Timeline**
 
-- **Part-time (5-10 hours/week):** 6-8 weeks
-- **Full-time focus:** 2-3 weeks
+- **Part-time (5-10 hours/week):** 5-7 weeks
+- **Full-time focus:** 2 weeks
+
+**Time Savings with Supabase:** ~2-3 hours saved by not setting up local PostgreSQL, Docker database configuration, and backup scripts.

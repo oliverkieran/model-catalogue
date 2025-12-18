@@ -53,10 +53,11 @@
 │  │   Endpoints  │  │  Extraction  │  │  + Scheduler │  │
 │  └──────────────┘  └──────────────┘  └──────────────┘  │
 └────────────────────┬────────────────────────────────────┘
-                     │
+                     │ SQLAlchemy
 ┌────────────────────▼────────────────────────────────────┐
-│              PostgreSQL Database                         │
+│           Supabase (Managed PostgreSQL)                  │
 │  (Relational tables + JSONB for flexible fields)        │
+│  + Automatic backups + Database UI                       │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -76,7 +77,7 @@
 
 - **Language:** Python 3.13+
 - **Framework:** FastAPI (async-capable, auto API docs)
-- **Database:** PostgreSQL with JSONB for flexible fields
+- **Database:** Supabase (managed PostgreSQL) with JSONB for flexible fields
 - **ORM:** SQLAlchemy with Alembic migrations
 - **Dependency Management:** uv
 - **RSS Parsing:** feedparser
@@ -96,9 +97,11 @@
 ### Deployment
 
 - **Platform:** VPS with Docker Compose
-- **Containers:** PostgreSQL, Backend (FastAPI), Frontend (nginx), Reverse Proxy (nginx/Caddy)
+- **Containers:** Backend (FastAPI), Frontend (nginx), Reverse Proxy (nginx/Caddy)
+- **Database:** Supabase Cloud (managed, no container needed)
 - **SSL:** Let's Encrypt
 - **Why VPS:** Cost-effective, full control, great for learning, production-ready
+- **Why Supabase:** Managed database, automatic backups, easier deployment, built-in UI
 
 ### Development Tools
 
@@ -116,11 +119,13 @@
 - **Newsletter ingestion:** Separate automated pipeline with scheduling
 - **Rationale:** Different prompts, processing patterns, and error handling needs
 
-### 2. PostgreSQL Choice
+### 2. Supabase (Managed PostgreSQL) Choice
 
-- **Flexibility:** Easy to add/remove fields with ALTER TABLE and Alembic migrations
+- **Managed Service:** No database DevOps - automatic backups, scaling, monitoring
+- **PostgreSQL Foundation:** Same flexibility with ALTER TABLE and Alembic migrations
 - **JSONB columns:** For flexible metadata and evolving opinion structures
-- **Proven:** Reliable for structured data with good querying capabilities
+- **Developer Experience:** Built-in database UI (Supabase Studio) for easy management
+- **Cost-Effective:** Free tier suitable for learning projects, easy to self-host PostgreSQL later if needed
 
 ### 3. Repository Pattern
 
@@ -136,10 +141,12 @@
 
 ### 5. Docker Compose Deployment
 
-- Single VPS hosts everything
-- Easy orchestration and updates
+- Single VPS hosts backend and frontend containers
+- Database hosted on Supabase Cloud (no database container)
+- Simplified orchestration and updates
 - Full control for learning purposes
 - Production-ready with proper configuration
+- Easier to manage without database container complexity
 
 ---
 
@@ -160,7 +167,7 @@
 
 **Phase 1: Database Layer** (4 hours)
 
-- Module 1.1: Database design, Docker setup, Alembic
+- Module 1.1: Database design, Supabase setup, Alembic
 - Module 1.2: SQLAlchemy models, repository pattern
 
 **Phase 2: API Layer** (5 hours)
@@ -184,16 +191,18 @@
 - Module 5.2: Model catalogue UI
 - Module 5.3: Manual input interface
 
-**Phase 6: Deployment** (6 hours)
+**Phase 6: Deployment** (5 hours)
 
-- Module 6.1: Docker configuration
-- Module 6.2: Production deployment on VPS
+- Module 6.1: Docker configuration (backend + frontend only)
+- Module 6.2: Production deployment on VPS with Supabase
 - Module 6.3: Maintenance and monitoring
 
 ### Estimated Timeline
 
-- **Part-time (5-10 hrs/week):** 6-8 weeks
-- **Full-time:** 2-3 weeks
+- **Part-time (5-10 hrs/week):** 5-7 weeks
+- **Full-time:** 2 weeks
+
+**Note:** Using Supabase saves ~2-3 hours compared to self-hosted PostgreSQL setup.
 
 ---
 
@@ -234,7 +243,7 @@
 1. **Docker Best Practices:** Multi-stage builds, layer caching
 2. **Zero-Downtime Deployment:** Rolling updates
 3. **Monitoring:** Health checks, logging, error tracking
-4. **Backup Strategy:** Automated database backups
+4. **Backup Strategy:** Supabase automatic backups (built-in)
 
 ---
 

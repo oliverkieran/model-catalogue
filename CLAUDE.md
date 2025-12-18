@@ -11,7 +11,7 @@
 ### Backend
 
 - **Python 3.13+** with **FastAPI** (async web framework)
-- **PostgreSQL** with JSONB for flexible metadata storage
+- **Supabase** (managed PostgreSQL) with JSONB for flexible metadata storage
 - **SQLAlchemy** ORM with **Alembic** migrations
 - **uv** for dependency management
 - **pytest** for testing
@@ -29,7 +29,8 @@
 
 ### Deployment
 
-- **Docker Compose** for orchestration
+- **Docker Compose** for backend/frontend orchestration
+- **Supabase Cloud** for managed database (no database container needed)
 - **VPS** deployment target
 - **nginx/Caddy** for reverse proxy
 - **Let's Encrypt** for SSL
@@ -146,6 +147,27 @@ ruff check .
 ruff format .
 ```
 
+### Supabase (Local Development - Optional)
+
+```bash
+# Start local Supabase stack (PostgreSQL + Studio UI)
+supabase start
+
+# Stop local Supabase
+supabase stop
+
+# Reset local database
+supabase db reset
+
+# Push migrations to Supabase (alternative to alembic)
+supabase db push
+```
+
+**Note:** You can develop using either:
+
+- **Option A:** Supabase Cloud dev project (simpler, no local database)
+- **Option B:** Local Supabase CLI (recommended, works offline)
+
 ### Frontend (when implemented)
 
 ```bash
@@ -168,7 +190,7 @@ npm run type-check
 ### Docker
 
 ```bash
-# Start all services
+# Start all services (backend + frontend)
 docker-compose up -d
 
 # View logs
@@ -179,10 +201,9 @@ docker-compose up -d --build
 
 # Stop services
 docker-compose down
-
-# Clean volumes (destructive)
-docker-compose down -v
 ```
+
+**Note:** The PostgreSQL database is hosted on Supabase, so there's no database container in docker-compose.yml.
 
 ## Testing Strategy
 
@@ -235,14 +256,33 @@ Mark slow tests (real LLM API calls) with `@pytest.mark.slow` and exclude from d
 Use `.env` files for local development. Required variables:
 
 ```bash
-DATABASE_URL=postgresql://user:pass@localhost/dbname
+# Supabase Database Connection
+DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres
+
+# Supabase URLs (Optional - only if using Supabase client directly)
+SUPABASE_URL=https://[PROJECT-REF].supabase.co
+SUPABASE_ANON_KEY=eyJ...
+SUPABASE_SERVICE_KEY=eyJ...
+
+# LLM Integration
 ANTHROPIC_API_KEY=sk-ant-...
+
+# RSS Feed
 RSS_FEED_URL=https://...
+
+# API Configuration
 CORS_ORIGINS=http://localhost:5173
 LOG_LEVEL=INFO
 ```
 
 Never commit secrets. Use `.env.example` for templates.
+
+**Getting Supabase Credentials:**
+
+1. Create a project at https://supabase.com
+2. Go to Project Settings → Database
+3. Copy the connection string (set mode to "Session")
+4. Find API keys in Project Settings → API
 
 ## Git Workflow
 
@@ -285,14 +325,16 @@ git push origin feat/model-repository
 The project follows a 6-phase implementation plan (see `/conversations/initial-plan.md`):
 
 1. **Phase 0:** Project setup and structure
-2. **Phase 1:** Database layer with SQLAlchemy models and repositories
+2. **Phase 1:** Database layer with SQLAlchemy models and repositories (using Supabase)
 3. **Phase 2:** FastAPI endpoints and Pydantic schemas
 4. **Phase 3:** Manual LLM input processing
 5. **Phase 4:** Automated RSS newsletter ingestion
 6. **Phase 5:** React frontend
-7. **Phase 6:** Docker deployment
+7. **Phase 6:** Docker deployment (simplified - no database container)
 
 When implementing, follow the modular approach: complete one phase before moving to the next, with tests at each stage.
+
+**Note on Phase 1:** Instead of setting up a local PostgreSQL container, you'll create a Supabase project and connect to it. The SQLAlchemy models and repository patterns remain identical.
 
 ## References
 

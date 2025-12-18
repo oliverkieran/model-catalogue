@@ -22,7 +22,7 @@ This is a learning project designed to teach full-stack software engineering bes
 ### Backend
 
 - **Python 3.13+** with **FastAPI** (async web framework)
-- **PostgreSQL** with SQLAlchemy ORM
+- **Supabase** (managed PostgreSQL) with SQLAlchemy ORM
 - **Anthropic Claude API** for LLM-powered data extraction
 - **APScheduler** for automated RSS processing
 - **pytest** for testing
@@ -36,7 +36,8 @@ This is a learning project designed to teach full-stack software engineering bes
 
 ### Deployment
 
-- **Docker Compose** for local development and production
+- **Docker Compose** for backend and frontend
+- **Supabase Cloud** for managed database
 - **VPS** deployment with **nginx** reverse proxy
 
 ## 🚀 Getting Started
@@ -45,7 +46,7 @@ This is a learning project designed to teach full-stack software engineering bes
 
 - Python 3.13 or higher
 - Node.js 18+ and npm
-- PostgreSQL 15+
+- Supabase account (free tier available at https://supabase.com)
 - Docker and Docker Compose (for containerized setup)
 
 ### Backend Setup
@@ -61,8 +62,9 @@ uv sync
 cp .env.example .env
 
 # Edit .env with your configuration
+# - Create a Supabase project at https://supabase.com
+# - Copy the database connection string from Project Settings → Database
 # - Add your Anthropic API key
-# - Configure database URL
 # - Set RSS feed URL
 
 # Run tests to verify setup

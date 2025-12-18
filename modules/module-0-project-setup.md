@@ -251,8 +251,8 @@ class Settings(BaseSettings):
     app_name: str = "Model Catalogue API"
     debug: bool = False
 
-    # Database
-    database_url: str = "postgresql://user:password@localhost:5432/model_catalogue"
+    # Database (Supabase)
+    database_url: str = "postgresql://postgres:[password]@db.[project-ref].supabase.co:5432/postgres"
 
     # LLM Service
     anthropic_api_key: str = ""
@@ -417,9 +417,10 @@ Create a `.env.example` file at the root of your project:
 APP_NAME="Model Catalogue API"
 DEBUG=False
 
-# Database Configuration
-# Format: postgresql://user:password@host:port/database
-DATABASE_URL=postgresql://catalogue_user:your_secure_password@localhost:5432/model_catalogue
+# Database Configuration (Supabase)
+# Get this from Supabase Project Settings → Database → Connection String
+# Set mode to "Session" for the connection pooler
+DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres
 
 # Anthropic API (Claude)
 # Get your API key from: https://console.anthropic.com/
@@ -802,10 +803,10 @@ Congratulations! 🎉 You've built a solid foundation for your full-stack applic
 
 In **Module 1.1**, you'll:
 
+- Create a Supabase project and get your database credentials
 - Design the database schema for models, benchmarks, and opinions
-- Set up PostgreSQL with Docker Compose
 - Initialize Alembic for database migrations
-- Create your first migration
+- Create your first migration and apply it to Supabase
 
 The foundation is laid. Now it's time to build the data layer!
 
