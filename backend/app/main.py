@@ -10,18 +10,19 @@ VERSION = "0.1.0"
 # Create FastAPI app instance
 app = FastAPI(
     title="Model Catalogue API",
-    description="API for managing and comparing AI models."
+    description="API for managing and comparing AI models.",
     version=VERSION,
 )
 
 # Configure CORS for frontend communication
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"]  # Vite's default port
+    allow_origins=["http://localhost:5173"],  # Vite's default port
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 @app.get("/")
 async def root():
@@ -29,14 +30,15 @@ async def root():
     return {
         "message": "Model Catalogue API",
         "status": "operational",
-        "version": VERSION
+        "version": VERSION,
     }
-    
+
+
 @app.get("/api/v1/health")
 async def health_check():
     """Detailed health check for monitoring"""
     return {
         "status": "healthy",
         "database": "not configured yet",
-        "llm_service": "not configured yet"
+        "llm_service": "not configured yet",
     }

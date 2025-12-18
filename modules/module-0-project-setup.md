@@ -454,9 +454,11 @@ cd ..
 
 Testing from day one! Let's set up the testing infrastructure.
 
+First, create a `pytest.ini` file in the `backend/` directory:
+
+`touch backend/pytest.ini`
+
 ```bash
-# Create pytest configuration
-cat > backend/pytest.ini << 'EOF'
 [pytest]
 testpaths = tests
 python_files = test_*.py
@@ -470,10 +472,11 @@ markers =
     slow: marks tests as slow (deselect with '-m "not slow"')
     integration: marks tests as integration tests
     unit: marks tests as unit tests
-EOF
+```
 
-# Create conftest.py for shared fixtures
-cat > backend/tests/conftest.py << 'EOF'
+Then create a `conftest.py` file in `backend/tests/` for shared fixtures:
+
+```python
 """
 Pytest configuration and shared fixtures
 """
@@ -481,14 +484,12 @@ import pytest
 from fastapi.testclient import TestClient
 from app.main import app
 
-
 @pytest.fixture
 def client():
     """
     Create a test client for the FastAPI application
     """
     return TestClient(app)
-
 
 @pytest.fixture
 def sample_model_data():
@@ -501,22 +502,21 @@ def sample_model_data():
         "release_date": "2023-03-14",
         "description": "Large multimodal model"
     }
-EOF
+```
 
-# Create first test
-cat > backend/tests/test_main.py << 'EOF'
+Now create a sample test file `backend/tests/test_main.py` to test the main application endpoints:
+
+```python
 """
 Tests for main application endpoints
 """
 import pytest
-
 
 def test_root_endpoint(client):
     """Test the root endpoint returns expected response"""
     response = client.get("/")
     assert response.status_code == 200
     assert response.json()["status"] == "operational"
-
 
 def test_health_check(client):
     """Test the health check endpoint"""
@@ -525,12 +525,11 @@ def test_health_check(client):
     assert "status" in response.json()
     assert response.json()["status"] == "healthy"
 
-
 @pytest.mark.slow
 def test_placeholder_slow():
     """Example of a slow test (like LLM API calls)"""
     pass
-EOF
+
 ```
 
 Run the tests to verify everything works:
@@ -564,7 +563,6 @@ tests/test_main.py::test_placeholder_slow PASSED
 Every project needs a README. Let's create one:
 
 ````bash
-cat > README.md << 'EOF'
 # AI Model Catalogue
 
 A full-stack web application for tracking AI model performance on academic benchmarks and aggregating public opinions from various sources.
@@ -723,14 +721,7 @@ See `modules/` directory for detailed implementation guides.
 - [Anthropic API Documentation](https://docs.anthropic.com/)
 - [Project Planning Documents](./conversations/)
 
-## 📝 License
-
-This is a learning project. Feel free to use it as a reference for your own projects.
-
----
-
 **Status**: 🚧 Module 0 Complete - Database layer coming next!
-EOF
 
 ````
 
