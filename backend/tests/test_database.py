@@ -4,7 +4,8 @@ Database connection and schema tests with SQLModel and Async SQLAlchemy
 
 import pytest
 from sqlalchemy import text, inspect
-from app.models.models import Model
+from sqlmodel import select
+from app.models.models import Model, Opinion
 
 
 async def test_database_connection(test_session):
@@ -50,22 +51,121 @@ async def test_models_table_columns(test_engine):
         assert set(column_names) == model_fields
 
 
-async def test_can_create_model(test_session):
+async def test_can_create_model(test_session, sample_model):
     """Test that we can insert and query a model using SQLModel"""
-    test_model = Model(
-        name="gpt-test",
-        display_name="GPT Test Model",
-        organization="Test Org",
-        description="A test model for unit testing.",
-    )
-    test_session.add(test_model)
-    await test_session.commit()  # Write to DB without committing
-    await test_session.refresh(test_model)
+    test_session.add(sample_model)
+    await test_session.commit()  # OK: commits the SAVEPOINT, not the outer transaction
+    await test_session.refresh(sample_model)
 
     # Verify it has an ID and created_at timestamp
-    assert test_model.id is not None, "Model ID should not be None after insert"
-    assert test_model.created_at is not None, "Model should have created_at timestamp"
+    assert sample_model.id is not None, "Model ID should not be None after insert"
+    assert sample_model.created_at is not None, "Model should have created_at timestamp"
 
-    # Clean up - delete the test model
-    await test_session.delete(test_model)
+    # Prove it was actually written by querying the DB
+    stmt = select(Model).where(Model.id == sample_model.id)
+    row = (await test_session.exec(stmt)).first()
+
+    assert row.name == "gpt-test"
+    assert row.display_name == "GPT Test Model"
+    assert row.organization == "Test Org"
+
+
+async def test_foreign_key_constraints(test_session, sample_model):
+    """Test that foreign key relationships work correctly"""
+
+    # Add the sample model first
+    test_session.add(sample_model)
     await test_session.commit()
+    await test_session.refresh(sample_model)
+
+    # Create an opinion linked to the model
+    test_opinion = Opinion(
+        model_id=sample_model.id,
+        content="This is a test opinion about the model.",
+        author="Test User",
+    )
+    test_session.add(test_opinion)
+    await test_session.commit()
+    await test_session.refresh(test_opinion)
+
+    # Verify forward relationship (Opinion -> Model)
+    assert test_opinion.model.id == sample_model.id
+
+    # Verify reverse relationship (Model -> Opinion)
+    # Must specify attribute_names to eagerly load the relationship in async context
+    await test_session.refresh(sample_model, attribute_names=["opinions"])
+    assert len(sample_model.opinions) == 1
+    assert sample_model.opinions[0].id == test_opinion.id
+
+
+async def test_unique_constraint(test_session, sample_model):
+    """Test that the unique constraint on model name is enforced"""
+    from sqlalchemy.exc import IntegrityError
+
+    # Add the sample model first
+    test_session.add(sample_model)
+    await test_session.commit()
+
+    # Attempt to add another model with the same name
+    duplicate_model = Model(
+        name=sample_model.name,
+        display_name="Another Model",
+        organization="Another Org",
+    )
+    test_session.add(duplicate_model)
+
+    with pytest.raises(IntegrityError) as exc_info:
+        await test_session.commit()
+    assert "unique constraint" in str(exc_info.value).lower()
+
+
+async def test_jsonb_column(test_session, sample_model):
+    """Test that JSONB columns work correctly"""
+    from sqlalchemy.dialects.postgresql import JSONB
+
+    metadata = {
+        "pricing": "free",
+        "context_window": 2048,
+        "capabilities": ["text-generation", "code-completion"],
+    }
+
+    sample_model.metadata_ = metadata
+
+    test_session.add(sample_model)
+    await test_session.commit()
+    await test_session.refresh(sample_model)
+
+    # Verify the metadata was stored and retrieved correctly
+    assert sample_model.metadata_ == metadata
+
+
+async def test_cascade_delete(test_session, sample_model):
+    """Test that cascade delete works for related opinions"""
+    # Add the sample model first
+    test_session.add(sample_model)
+    await test_session.commit()
+    await test_session.refresh(sample_model)
+
+    # Create an opinion linked to the model
+    test_opinion = Opinion(
+        model_id=sample_model.id,
+        content="This is a test opinion about the model.",
+        author="Test User",
+    )
+    test_session.add(test_opinion)
+    await test_session.commit()
+    await test_session.refresh(test_opinion)
+
+    # Verify the opinion exists
+    stmt = select(Opinion).where(Opinion.id == test_opinion.id)
+    row = (await test_session.exec(stmt)).first()
+    assert row is not None
+
+    # Delete the model
+    await test_session.delete(sample_model)
+    await test_session.commit()
+
+    # Verify the opinion was also deleted
+    stmt = select(Opinion).where(Opinion.id == test_opinion.id)
+    row = (await test_session.exec(stmt)).first()
+    assert row is None
