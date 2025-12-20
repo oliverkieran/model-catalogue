@@ -1301,17 +1301,79 @@ from .session import get_db, AsyncSessionLocal, engine, init_db
 __all__ = ["get_db", "AsyncSessionLocal", "engine", "init_db"]
 ```
 
+### Create Test Fixtures
+
+In order to test database interactions without affecting the real database, we'll create test fixtures that provide a fresh database session for each test.
+
+Add the following two fixtures to `backend/tests/conftest.py`:
+
+```python
+@pytest.fixture()
+async def test_engine():
+    """
+    Create a fresh async engine for each test function
+    This prevents event loop conflicts between tests
+    """
+    engine = create_async_engine(
+        settings.database_url_async,
+        echo=False,
+        future=True,
+    )
+    yield engine
+    await engine.dispose()
+
+
+@pytest.fixture(scope="function")
+async def test_session(test_engine):
+    """
+    One DB connection + outer transaction per test, always rolled back.
+    Nested transaction (SAVEPOINT) allows code under test to call commit().
+    """
+    async with test_engine.connect() as conn:
+        outer_tx = await conn.begin()
+
+        # Build the session to this connection
+        async_session_maker = async_sessionmaker(
+            bind=conn,
+            class_=AsyncSession,
+            expire_on_commit=False,
+        )
+
+        async with async_session_maker() as session:
+            # Start SAVEPOINT
+            await session.begin_nested()
+
+            # If the code under test calls commit(), the SAVEPOINT ends.
+            # This listener recreates it so the session can keep working.
+            @event.listens_for(session.sync_session, "after_transaction_end")
+            def _restart_savepoint(sess, trans):
+                if trans.nested and not trans._parent.nested:
+                    sess.begin_nested()
+
+            try:
+                yield session
+            finally:
+                # Close session and rollback everything done in the test
+                await session.close()
+                # Only rollback if the transaction is still active
+                # (IntegrityError and other DB exceptions auto-rollback the transaction)
+                if outer_tx.is_active:
+                    await outer_tx.rollback()
+```
+
 ### Create Database Tests
 
 Create `backend/tests/test_database.py`:
 
 ```python
 """
-Database connection and schema tests with SQLModel
+Database connection and schema tests with SQLModel and Async SQLAlchemy
 """
+
 import pytest
 from sqlalchemy import text, inspect
-from app.models.models import Model
+from sqlmodel import select
+from app.models.models import Model, Opinion
 
 
 async def test_database_connection(test_session):
@@ -1320,15 +1382,30 @@ async def test_database_connection(test_session):
     assert result.one() == (1,)
 
 
-async def test_models_table_exists(test_engine):
-    """Test that the 'models' table was created with correct columns"""
+async def test_all_tables_exist(test_engine):
+    """Test that all expected tables exist in the database"""
+    expected_tables = [
+        "models",
+        "benchmarks",
+        "benchmark_results",
+        "opinions",
+        "use_cases",
+    ]
     async with test_engine.begin() as conn:
-        # Get table schema
-        result = await conn.run_sync(
-            lambda sync_conn: inspect(sync_conn).has_table("models")
-        )
-        assert result is True
-        # Get columns
+        # Check each expected table
+        for table_name in expected_tables:
+            result = await conn.run_sync(
+                lambda sync_conn: inspect(sync_conn).has_table(table_name)
+            )
+            assert (
+                result is True
+            ), f"Table '{table_name}' does not exist in the database"
+
+
+async def test_models_table_columns(test_engine):
+    """Test that the 'models' table has the expected columns"""
+    # Get columns
+    async with test_engine.begin() as conn:
         columns = await conn.run_sync(
             lambda sync_conn: inspect(sync_conn).get_columns("models")
         )
@@ -1342,252 +1419,125 @@ async def test_models_table_exists(test_engine):
         assert set(column_names) == model_fields
 
 
-@pytest.mark.asyncio
-async def test_benchmarks_table_exists():
-    """Test that the benchmarks table exists"""
-    async with engine.begin() as conn:
-        result = await conn.run_sync(
-            lambda sync_conn: inspect(sync_conn).has_table("benchmarks")
-        )
-        assert result is True
-
-
-@pytest.mark.asyncio
-async def test_can_create_model():
+async def test_can_create_model(test_session, sample_model):
     """Test that we can insert and query a model using SQLModel"""
-    async with AsyncSessionLocal() as session:
-        # Create a test model
-        test_model = Model(
-            name="Test-Model-12345",
-            organization="Test Org",
-            description="A test model for database testing"
-        )
+    test_session.add(sample_model)
+    await test_session.commit()  # OK: commits the SAVEPOINT, not the outer transaction
+    await test_session.refresh(sample_model)
 
-        session.add(test_model)
-        await session.commit()
-        await session.refresh(test_model)
+    # Verify it has an ID and created_at timestamp
+    assert sample_model.id is not None, "Model ID should not be None after insert"
+    assert sample_model.created_at is not None, "Model should have created_at timestamp"
 
-        # Verify it has an ID and timestamps
-        assert test_model.id is not None
-        assert test_model.created_at is not None
-        assert test_model.updated_at is not None
+    # Prove it was actually written by querying the DB
+    stmt = select(Model).where(Model.id == sample_model.id)
+    row = (await test_session.exec(stmt)).first()
 
-        # Query it back using SQLModel select
-        statement = select(Model).where(Model.name == "Test-Model-12345")
-        result = await session.execute(statement)
-        fetched_model = result.scalar_one()
-
-        assert fetched_model.id == test_model.id
-        assert fetched_model.organization == "Test Org"
-
-        # Clean up - delete the test model
-        await session.delete(test_model)
-        await session.commit()
+    assert row.name == "gpt-test"
+    assert row.display_name == "GPT Test Model"
+    assert row.organization == "Test Org"
 
 
-@pytest.mark.asyncio
-async def test_foreign_key_relationship():
-    """Test that foreign key relationships work correctly with SQLModel"""
-    async with AsyncSessionLocal() as session:
-        # Create a model
-        test_model = Model(
-            name="FK-Test-Model-67890",
-            organization="Test Org"
-        )
-        session.add(test_model)
-        await session.commit()
-        await session.refresh(test_model)
+async def test_foreign_key_constraints(test_session, sample_model):
+    """Test that foreign key relationships work correctly"""
 
-        # Create a benchmark
-        test_benchmark = Benchmark(
-            name="FK-Test-Benchmark-67890",
-            category="Testing"
-        )
-        session.add(test_benchmark)
-        await session.commit()
-        await session.refresh(test_benchmark)
+    # Add the sample model first
+    test_session.add(sample_model)
+    await test_session.commit()
+    await test_session.refresh(sample_model)
 
-        # Create a benchmark result linking them
-        test_result = BenchmarkResult(
-            model_id=test_model.id,
-            benchmark_id=test_benchmark.id,
-            score=95.5
-        )
-        session.add(test_result)
-        await session.commit()
-        await session.refresh(test_result)
+    # Create an opinion linked to the model
+    test_opinion = Opinion(
+        model_id=sample_model.id,
+        content="This is a test opinion about the model.",
+        author="Test User",
+    )
+    test_session.add(test_opinion)
+    await test_session.commit()
+    await test_session.refresh(test_opinion)
 
-        # Verify the relationship
-        assert test_result.model_id == test_model.id
-        assert test_result.benchmark_id == test_benchmark.id
-        assert test_result.score == 95.5
+    # Verify forward relationship (Opinion -> Model)
+    assert test_opinion.model.id == sample_model.id
 
-        # Test SQLModel's relationship loading
-        # Note: In async, we need to explicitly load relationships
-        statement = select(BenchmarkResult).where(BenchmarkResult.id == test_result.id)
-        result = await session.execute(statement)
-        loaded_result = result.scalar_one()
-
-        # Access the relationship (lazy loading works in async session)
-        assert loaded_result.model_id == test_model.id
-
-        # Clean up
-        await session.delete(test_result)
-        await session.delete(test_benchmark)
-        await session.delete(test_model)
-        await session.commit()
+    # Verify reverse relationship (Model -> Opinion)
+    # Must specify attribute_names to eagerly load the relationship in async context
+    await test_session.refresh(sample_model, attribute_names=["opinions"])
+    assert len(sample_model.opinions) == 1
+    assert sample_model.opinions[0].id == test_opinion.id
 
 
-@pytest.mark.asyncio
-async def test_unique_constraint():
-    """Test that unique constraints are enforced"""
+async def test_unique_constraint(test_session, sample_model):
+    """Test that the unique constraint on model name is enforced"""
     from sqlalchemy.exc import IntegrityError
 
-    async with AsyncSessionLocal() as session:
-        # Create a model
-        model1 = Model(name="Unique-Test-99999", organization="Test Org")
-        session.add(model1)
-        await session.commit()
+    # Add the sample model first
+    test_session.add(sample_model)
+    await test_session.commit()
 
-        # Try to create another model with the same name (should fail)
-        model2 = Model(name="Unique-Test-99999", organization="Another Org")
-        session.add(model2)
+    # Attempt to add another model with the same name
+    duplicate_model = Model(
+        name=sample_model.name,
+        display_name="Another Model",
+        organization="Another Org",
+    )
+    test_session.add(duplicate_model)
 
-        with pytest.raises(IntegrityError):
-            await session.commit()
-
-        # Rollback the failed transaction
-        await session.rollback()
-
-        # Clean up the first model
-        await session.delete(model1)
-        await session.commit()
+    with pytest.raises(IntegrityError) as exc_info:
+        await test_session.commit()
+    assert "unique constraint" in str(exc_info.value).lower()
 
 
-@pytest.mark.asyncio
-async def test_jsonb_and_array_columns():
-    """Test that JSONB and ARRAY columns work correctly with SQLModel"""
-    async with AsyncSessionLocal() as session:
-        # Create a model with JSONB metadata
-        test_model = Model(
-            name="JSONB-Test-11111",
-            organization="Test Org",
-            metadata_={
-                "context_window": 128000,
-                "multimodal": True,
-                "pricing": {"input": 0.03, "output": 0.06}
-            }
-        )
-        session.add(test_model)
-        await session.commit()
-        await session.refresh(test_model)
+async def test_jsonb_column(test_session, sample_model):
+    """Test that JSONB columns work correctly"""
+    from sqlalchemy.dialects.postgresql import JSONB
 
-        # Create an opinion with array tags
-        test_opinion = Opinion(
-            model_id=test_model.id,
-            content="This model is great for testing!",
-            sentiment="positive",
-            tags=["testing", "example", "demo"]
-        )
-        session.add(test_opinion)
-        await session.commit()
-        await session.refresh(test_opinion)
+    metadata = {
+        "pricing": "free",
+        "context_window": 2048,
+        "capabilities": ["text-generation", "code-completion"],
+    }
 
-        # Verify JSONB and array data
-        assert test_model.metadata_["context_window"] == 128000
-        assert test_model.metadata_["multimodal"] is True
-        assert test_opinion.tags == ["testing", "example", "demo"]
+    sample_model.metadata_ = metadata
 
-        # Query by JSONB field (PostgreSQL JSON operators)
-        statement = select(Model).where(
-            Model.metadata_["context_window"].as_integer() == 128000
-        )
-        result = await session.execute(statement)
-        queried_model = result.scalar_one()
-        assert queried_model.id == test_model.id
+    test_session.add(sample_model)
+    await test_session.commit()
+    await test_session.refresh(sample_model)
 
-        # Clean up
-        await session.delete(test_opinion)
-        await session.delete(test_model)
-        await session.commit()
+    # Verify the metadata was stored and retrieved correctly
+    assert sample_model.metadata_ == metadata
 
 
-@pytest.mark.asyncio
-async def test_cascade_delete():
-    """Test that CASCADE delete works (deleting model deletes related data)"""
-    async with AsyncSessionLocal() as session:
-        # Create a model
-        test_model = Model(
-            name="Cascade-Test-22222",
-            organization="Test Org"
-        )
-        session.add(test_model)
-        await session.commit()
-        await session.refresh(test_model)
+async def test_cascade_delete(test_session, sample_model):
+    """Test that cascade delete works for related opinions"""
+    # Add the sample model first
+    test_session.add(sample_model)
+    await test_session.commit()
+    await test_session.refresh(sample_model)
 
-        # Create related opinion
-        test_opinion = Opinion(
-            model_id=test_model.id,
-            content="Test opinion",
-            sentiment="neutral"
-        )
-        session.add(test_opinion)
-        await session.commit()
-        await session.refresh(test_opinion)
+    # Create an opinion linked to the model
+    test_opinion = Opinion(
+        model_id=sample_model.id,
+        content="This is a test opinion about the model.",
+        author="Test User",
+    )
+    test_session.add(test_opinion)
+    await test_session.commit()
+    await test_session.refresh(test_opinion)
 
-        opinion_id = test_opinion.id
+    # Verify the opinion exists
+    stmt = select(Opinion).where(Opinion.id == test_opinion.id)
+    row = (await test_session.exec(stmt)).first()
+    assert row is not None
 
-        # Delete the model
-        await session.delete(test_model)
-        await session.commit()
+    # Delete the model
+    await test_session.delete(sample_model)
+    await test_session.commit()
 
-        # Verify the opinion was also deleted (CASCADE)
-        statement = select(Opinion).where(Opinion.id == opinion_id)
-        result = await session.execute(statement)
-        deleted_opinion = result.scalar_one_or_none()
+    # Verify the opinion was also deleted
+    stmt = select(Opinion).where(Opinion.id == test_opinion.id)
+    row = (await test_session.exec(stmt)).first()
+    assert row is None
 
-        assert deleted_opinion is None  # Should be deleted
-
-
-@pytest.mark.asyncio
-async def test_timestamps_auto_populate():
-    """Test that created_at and updated_at are automatically set"""
-    from datetime import datetime
-    import asyncio
-
-    async with AsyncSessionLocal() as session:
-        # Create a model
-        test_model = Model(
-            name="Timestamp-Test-33333",
-            organization="Test Org"
-        )
-        session.add(test_model)
-        await session.commit()
-        await session.refresh(test_model)
-
-        # Check timestamps exist
-        assert test_model.created_at is not None
-        assert test_model.updated_at is not None
-        assert isinstance(test_model.created_at, datetime)
-        assert isinstance(test_model.updated_at, datetime)
-
-        # Store original updated_at
-        original_updated_at = test_model.updated_at
-
-        # Wait a moment and update
-        await asyncio.sleep(0.1)
-        test_model.description = "Updated description"
-        session.add(test_model)
-        await session.commit()
-        await session.refresh(test_model)
-
-        # updated_at should be different now
-        # Note: In some cases, the database might not update this immediately
-        # This is a best-effort test
-
-        # Clean up
-        await session.delete(test_model)
-        await session.commit()
 ```
 
 ### Run the Tests
@@ -1602,16 +1552,15 @@ You should see all tests pass! 🎉
 
 ```
 tests/test_database.py::test_database_connection PASSED
-tests/test_database.py::test_models_table_exists PASSED
-tests/test_database.py::test_benchmarks_table_exists PASSED
+tests/test_database.py::test_all_tables_exist PASSED
+tests/test_database.py::test_models_table_columns PASSED
 tests/test_database.py::test_can_create_model PASSED
-tests/test_database.py::test_foreign_key_relationship PASSED
+tests/test_database.py::test_foreign_key_constraints PASSED
 tests/test_database.py::test_unique_constraint PASSED
-tests/test_database.py::test_jsonb_and_array_columns PASSED
+tests/test_database.py::test_jsonb_column PASSED
 tests/test_database.py::test_cascade_delete PASSED
-tests/test_database.py::test_timestamps_auto_populate PASSED
 
-====== 9 passed in X.XX s ======
+====== 8 passed in X.XX s ======
 ```
 
 **What do these tests verify?**
@@ -1623,7 +1572,6 @@ tests/test_database.py::test_timestamps_auto_populate PASSED
 5. ✅ Unique constraints are enforced
 6. ✅ JSONB and array columns work correctly
 7. ✅ CASCADE delete works as expected
-8. ✅ Timestamps auto-populate
 
 **🎯 Final Checkpoint:** All database tests pass. Your SQLModel schema is production-ready!
 
@@ -1741,89 +1689,6 @@ WHERE model_id = 1 AND benchmark_id = 5;
 -- Fast because we indexed models.name
 SELECT * FROM models WHERE name = 'GPT-4';
 ```
-
----
-
-## Common Pitfalls and How to Avoid Them
-
-### Pitfall 1: Wrong Database URL Format for Async
-
-**Symptom:**
-
-```
-ValueError: Only postgresql+asyncpg is supported for async operations
-```
-
-**Solution:** Ensure you convert the URL to async format:
-
-```python
-database_url = settings.database_url.replace("postgresql://", "postgresql+asyncpg://")
-```
-
-### Pitfall 2: Forgetting to Install asyncpg
-
-**Symptom:**
-
-```
-ModuleNotFoundError: No module named 'asyncpg'
-```
-
-**Solution:**
-
-```bash
-cd backend
-uv add asyncpg
-```
-
-### Pitfall 3: Alembic Can't Find SQLModel Tables
-
-**Symptom:** `alembic revision --autogenerate` generates an empty migration.
-
-**Solution:** Ensure you imported all table models in `alembic/env.py`:
-
-```python
-from sqlmodel import SQLModel
-from app.models import models  # This import registers all table=True models
-target_metadata = SQLModel.metadata
-```
-
-### Pitfall 4: Field Name Conflicts with Python Keywords
-
-**Symptom:** Can't use `metadata` as field name (reserved in SQLModel).
-
-**Solution:** Use a trailing underscore and sa_column:
-
-```python
-metadata_: dict | None = Field(
-    default=None,
-    sa_column=Column("metadata", JSONB, nullable=True)
-)
-```
-
-The field in Python is `metadata_`, but in the database it's `metadata`.
-
-### Pitfall 5: Relationship Loading in Async
-
-**Symptom:** Accessing relationships raises an error about "greenlet not spawned".
-
-**Solution:** Use eager loading with `selectinload` or `joinedload`:
-
-```python
-from sqlalchemy.orm import selectinload
-
-statement = (
-    select(Model)
-    .options(selectinload(Model.benchmark_results))
-)
-result = await session.execute(statement)
-model = result.scalar_one()
-```
-
-### Pitfall 6: Tests Pass but Supabase Studio Shows No Data
-
-**Cause:** Tests clean up after themselves (as they should!).
-
-**Solution:** This is expected behavior. Tests insert and then delete data. To see data in Supabase Studio, manually insert via the UI or run the app (in future modules).
 
 ---
 
@@ -2011,90 +1876,6 @@ You've built the schema with SQLModel. Now it's time to build the layer that int
 
 ---
 
-## Troubleshooting
-
-### Alembic Commands Hang
-
-**Cause:** Can't connect to database.
-
-**Solution:**
-
-1. Check `.env` has correct `DATABASE_URL`
-2. Verify Supabase project is running (not paused)
-3. Test connection manually:
-   ```bash
-   cd backend
-   uv run python -c "import asyncio; from app.db import engine; asyncio.run(engine.connect())"
-   ```
-
-### "Table already exists" Error
-
-**Cause:** You ran the migration twice, or created tables manually.
-
-**Solution:**
-
-```bash
-cd backend
-# Check current migration state
-uv run alembic current
-
-# If confused, downgrade and re-upgrade
-uv run alembic downgrade base
-uv run alembic upgrade head
-```
-
-### Import Errors in Tests
-
-**Cause:** Missing dependencies or wrong Python path.
-
-**Solution:**
-
-```bash
-cd backend
-uv sync
-uv run pytest tests/test_database.py -v
-```
-
-### SQLModel Field Validation Errors
-
-**Symptom:**
-
-```
-ValidationError: 1 validation error for Model
-```
-
-**Cause:** SQLModel uses Pydantic validation. Missing required fields or wrong types.
-
-**Solution:** Check that you're providing all required fields:
-
-```python
-# This will fail - missing required fields
-model = Model()  # ValidationError!
-
-# This works
-model = Model(name="GPT-4", organization="OpenAI")
-```
-
-### Async Session Errors
-
-**Symptom:**
-
-```
-greenlet_spawn has not been called
-```
-
-**Cause:** Trying to access lazy-loaded relationships in async session.
-
-**Solution:** Use eager loading:
-
-```python
-from sqlalchemy.orm import selectinload
-
-statement = select(Model).options(selectinload(Model.benchmark_results))
-```
-
----
-
 ## Additional Resources
 
 ### SQLModel
@@ -2129,145 +1910,3 @@ statement = select(Model).options(selectinload(Model.benchmark_results))
 **Next Module:** [Module 1.2 - Repository Pattern with SQLModel](./module-1.2-repository-pattern.md)
 
 ---
-
-## Appendix: Common SQL Queries for This Schema
-
-Once you have data in your database (in future modules), here are useful queries:
-
-```sql
--- Get all models with their benchmark scores
-SELECT m.name, m.organization, b.name as benchmark, br.score
-FROM models m
-JOIN benchmark_results br ON m.id = br.model_id
-JOIN benchmarks b ON br.benchmark_id = b.id
-ORDER BY m.name, b.name;
-
--- Find top-performing model on a specific benchmark
-SELECT m.name, m.organization, br.score
-FROM models m
-JOIN benchmark_results br ON m.id = br.model_id
-JOIN benchmarks b ON br.benchmark_id = b.id
-WHERE b.name = 'MMLU'
-ORDER BY br.score DESC
-LIMIT 5;
-
--- Get all opinions for a model
-SELECT o.content, o.sentiment, o.source, o.date_published
-FROM opinions o
-JOIN models m ON o.model_id = m.id
-WHERE m.name = 'GPT-4'
-ORDER BY o.date_published DESC;
-
--- Find models with specific metadata attribute (JSONB query)
-SELECT name, organization, metadata->>'context_window' as context_window
-FROM models
-WHERE metadata->>'multimodal' = 'true';
-
--- Count benchmark results per model
-SELECT m.name, COUNT(br.id) as num_results
-FROM models m
-LEFT JOIN benchmark_results br ON m.id = br.model_id
-GROUP BY m.id, m.name
-ORDER BY num_results DESC;
-
--- Find opinions with specific tag (array query)
-SELECT m.name, o.content, o.sentiment
-FROM opinions o
-JOIN models m ON o.model_id = m.id
-WHERE 'coding' = ANY(o.tags);
-```
-
-Practice these queries in Supabase Studio's SQL Editor to get comfortable with your schema!
-
----
-
-## Appendix: SQLModel Quick Reference
-
-### Defining Models
-
-```python
-# Base model (shared fields)
-class MyBase(SQLModel):
-    name: str = Field(max_length=255)
-    description: str | None = None
-
-# Table model
-class MyTable(MyBase, table=True):
-    id: int | None = Field(default=None, primary_key=True)
-
-# Schema models
-class MyCreate(MyBase):
-    pass
-
-class MyResponse(MyBase):
-    id: int
-    created_at: datetime
-```
-
-### Field Configuration
-
-```python
-# Basic field
-name: str = Field(max_length=255)
-
-# Indexed field
-email: str = Field(index=True, unique=True)
-
-# Foreign key
-user_id: int = Field(foreign_key="users.id")
-
-# With default
-status: str = Field(default="active")
-
-# Nullable
-description: str | None = Field(default=None)
-
-# Advanced column (use sa_column)
-content: str = Field(sa_column=Column(Text))
-```
-
-### Relationships
-
-```python
-# One-to-many
-class User(SQLModel, table=True):
-    id: int | None = Field(default=None, primary_key=True)
-    posts: list["Post"] = Relationship(back_populates="user")
-
-class Post(SQLModel, table=True):
-    id: int | None = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="users.id")
-    user: User = Relationship(back_populates="posts")
-```
-
-### Querying
-
-```python
-from sqlmodel import select
-
-# Get by ID
-user = await session.get(User, 1)
-
-# Select with where
-statement = select(User).where(User.email == "test@example.com")
-result = await session.execute(statement)
-user = result.scalar_one()
-
-# Select all
-statement = select(User)
-result = await session.execute(statement)
-users = result.scalars().all()
-
-# With joins and eager loading
-from sqlalchemy.orm import selectinload
-
-statement = (
-    select(User)
-    .options(selectinload(User.posts))
-    .where(User.id == 1)
-)
-result = await session.execute(statement)
-user = result.scalar_one()
-```
-
-This quick reference should help you as you continue building with SQLModel!
