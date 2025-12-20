@@ -96,17 +96,17 @@ model-catalogue/
 
 ---
 
-### **Module 1.2: SQLAlchemy Models & Repository Pattern**
+### **Module 1.2: SQLModel Models & Repository Pattern**
 
-**Duration:** 2 hours  
-**Learning Goals:** ORM patterns, repository pattern, database sessions
+**Duration:** 2 hours
+**Learning Goals:** ORM patterns, repository pattern, database sessions, unified models
 
 **What you'll build:**
 
-- SQLAlchemy models matching your schema
+- SQLModel models matching your schema (unified table + schema definitions)
 - Base repository class with CRUD operations
 - Specific repositories for each entity
-- Database session management
+- Database session management with AsyncSession
 
 **Example Pattern:**
 
@@ -128,9 +128,10 @@ class ModelRepository(BaseRepository):
 **Best Practices:**
 
 - Repository pattern (decouples data access from business logic)
-- Context managers for sessions
-- Type hints throughout
+- Context managers for async sessions
+- Type hints throughout with SQLModel's type safety
 - Comprehensive docstrings
+- Unified models reducing code duplication
 
 **Testing:**
 
@@ -142,14 +143,14 @@ class ModelRepository(BaseRepository):
 
 ## **Phase 2: API Layer with FastAPI**
 
-### **Module 2.1: Pydantic Schemas & API Foundation**
+### **Module 2.1: SQLModel Schemas & API Foundation**
 
-**Duration:** 2 hours  
-**Learning Goals:** Request/response validation, API design, OpenAPI docs
+**Duration:** 2 hours
+**Learning Goals:** Request/response validation, API design, OpenAPI docs, unified models
 
 **What you'll build:**
 
-- Pydantic schemas for all entities (Create, Update, Response)
+- SQLModel schemas for all entities (Create, Update, Response) - inheriting from table models
 - FastAPI application structure with routers
 - Health check and basic endpoints
 - Automatic API documentation
@@ -157,21 +158,29 @@ class ModelRepository(BaseRepository):
 **Schema Pattern:**
 
 ```python
-# Input/Output separation
-class ModelCreate(BaseModel):     # For POST requests
-class ModelUpdate(BaseModel):     # For PUT/PATCH
-class ModelResponse(BaseModel):   # For responses
-    class Config:
-        from_attributes = True    # ORM compatibility
+# Unified model approach with SQLModel
+class ModelBase(SQLModel):        # Shared fields
+    name: str
+    organization: str
+
+class Model(ModelBase, table=True):  # Database table
+    id: int | None = Field(default=None, primary_key=True)
+
+class ModelCreate(ModelBase):     # For POST requests
+    pass                          # Inherits from ModelBase
+
+class ModelResponse(ModelBase):   # For responses
+    id: int                       # Includes database-generated fields
 ```
 
 **Best Practices:**
 
-- Input validation with Pydantic
-- Separate schemas for different operations
+- Input validation with SQLModel (built on Pydantic)
+- Unified base models with inheritance for different operations
 - Response models for consistent API
 - Proper HTTP status codes
 - API versioning from the start (/api/v1/)
+- Reduced duplication through model inheritance
 
 **Testing:**
 

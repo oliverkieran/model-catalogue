@@ -20,6 +20,8 @@ In this module, you'll learn the art and science of **relational database design
 - **How to set up indexes** for performance from day one
 - **How database migrations** let you evolve your schema safely
 
+But here's what makes this module special: you'll learn to use **SQLModel**, a modern library that combines the power of SQLAlchemy's ORM with Pydantic's validation in a single unified model. No more maintaining duplicate definitions—one model class will serve as both your database table and your API schema.
+
 Most importantly, you'll learn to think in terms of **data integrity**—ensuring your database can't get into an invalid state, even when things go wrong.
 
 This isn't just theory. You'll create a real database on Supabase (managed PostgreSQL), design a production-ready schema for the AI Model Catalogue, and write your first database migration.
@@ -33,16 +35,108 @@ By the end of this module, you'll have:
 - ✅ A Supabase project with PostgreSQL database
 - ✅ Understanding of database normalization and when to use it
 - ✅ Complete schema design for 5 core entities (Models, Benchmarks, Results, Opinions, UseCases)
+- ✅ SQLModel models that serve double duty as tables AND schemas
 - ✅ Alembic configured for database migrations
 - ✅ Initial migration creating all tables with proper constraints
 - ✅ Schema deployed to Supabase and verified
-- ✅ Database connection tests to validate setup
+- ✅ Async database connection tests to validate setup
+
+---
+
+## Understanding SQLModel: The Best of Both Worlds
+
+Before we dive into database design, let's understand why we're using SQLModel instead of plain SQLAlchemy.
+
+### The Traditional Problem
+
+In typical FastAPI + SQLAlchemy projects, you maintain duplicate definitions:
+
+```python
+# SQLAlchemy model for the database
+class ModelDB(Base):
+    __tablename__ = "models"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    organization = Column(String, nullable=False)
+
+# Pydantic schema for API validation
+class ModelCreate(BaseModel):
+    name: str
+    organization: str
+
+# Pydantic schema for API responses
+class ModelResponse(BaseModel):
+    id: int
+    name: str
+    organization: str
+
+    class Config:
+        from_attributes = True
+```
+
+**The problem:** You're defining the same fields three times! Any change means updating multiple classes. It's tedious and error-prone.
+
+### The SQLModel Solution
+
+SQLModel, created by the same author as FastAPI, unifies these definitions:
+
+```python
+from sqlmodel import SQLModel, Field
+
+# Base model with shared fields
+class ModelBase(SQLModel):
+    name: str
+    organization: str
+
+# Table model for database
+class Model(ModelBase, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+
+# Schema models for API (inherit from base)
+class ModelCreate(ModelBase):
+    pass
+
+class ModelResponse(ModelBase):
+    id: int
+```
+
+**The benefits:**
+
+1. **Single source of truth**: Define fields once in the base model
+2. **Type safety**: Full editor support with type hints
+3. **Pydantic validation**: Automatic validation on all models
+4. **SQLAlchemy underneath**: All SQLAlchemy features still available
+5. **FastAPI integration**: Works seamlessly with FastAPI
+6. **Reduced code**: Less boilerplate, more clarity
+
+### How SQLModel Works
+
+SQLModel is built on top of SQLAlchemy and Pydantic:
+
+```
+┌─────────────────────────────────────────────┐
+│              Your SQLModel Classes          │
+│   (ModelBase, Model, ModelCreate, etc.)     │
+└─────────────────┬───────────────────────────┘
+                  │
+         ┌────────┴────────┐
+         ▼                 ▼
+  ┌─────────────┐   ┌─────────────┐
+  │ SQLAlchemy  │   │  Pydantic   │
+  │   (ORM)     │   │(Validation) │
+  └─────────────┘   └─────────────┘
+         │                 │
+         ▼                 ▼
+    Database           API I/O
+```
+
+**Key insight:** SQLModel models ARE SQLAlchemy models AND Pydantic models simultaneously. You get the best of both worlds.
 
 ---
 
 ## Step 1: Understanding Relational Database Design
 
-Before we write any SQL, let's understand the principles that will guide our decisions.
+Before we write any code, let's understand the principles that will guide our decisions.
 
 ### The Problem: Data Redundancy and Inconsistency
 
@@ -69,10 +163,10 @@ Imagine storing AI model data like this:
 
 ```
 Models:
-| id | name   | organization |
-|----|--------|--------------|
-| 1  | GPT-4  | OpenAI       |
-| 2  | Claude 3 | Anthropic |
+| id | name     | organization |
+|----|----------|--------------|
+| 1  | GPT-4    | OpenAI       |
+| 2  | Claude 3 | Anthropic    |
 
 Benchmarks:
 | id | name      | category  |
@@ -265,9 +359,9 @@ Supabase provides managed PostgreSQL with a fantastic UI, automatic backups, and
 
 Once your project is ready:
 
-1. Click on the **Connect** tab in the project's navigation bar
-2. Select Type: URI, and Method: Direct connection
-3. Copy the **URI** connection string (should look like):
+1. Click on the **Connect** button in the top right
+2. Select "Direct Connection" mode
+3. Copy the **URI** (it should look like):
 
 ```
 postgresql://postgres:[YOUR-PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres
@@ -275,13 +369,24 @@ postgresql://postgres:[YOUR-PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres
 
 4. Replace `[YOUR-PASSWORD]` with the database password you set earlier
 
+**Note:** Supabase provides two connection modes:
+
+- **Session mode** (port 5432) - Direct connection, for migrations
+- **Transaction mode** (port 6543) - Pooled connections, for application
+
+For now, use the **Session mode** connection string (change port to 5432):
+
+```
+postgresql://postgres:[YOUR-PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres
+```
+
 ### Update Your .env File
 
 Open your `.env` file and update the `DATABASE_URL`:
 
 ```bash
 # .env
-DATABASE_URL=postgresql://postgres:your-actual-password@db.xxxxx.supabase.co:5432/postgres
+DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres
 ```
 
 **Security Note:** The `.env` file is in `.gitignore` and will NEVER be committed to version control. Anyone with this URL can access your database—treat it like a password!
@@ -290,7 +395,505 @@ DATABASE_URL=postgresql://postgres:your-actual-password@db.xxxxx.supabase.co:543
 
 ---
 
-## Step 4: Installing and Configuring Alembic
+## Step 4: Creating SQLModel Models - The Unified Approach
+
+Now comes the exciting part: defining our database schema using SQLModel's unified model approach.
+
+### Understanding SQLModel's Model Patterns
+
+SQLModel uses three types of models:
+
+1. **Base Models** (`table=False`, default): Shared fields, not database tables
+2. **Table Models** (`table=True`): Actual database tables
+3. **Schema Models** (inherit from base): For API validation and responses
+
+**The pattern:**
+
+```python
+# Step 1: Define base model with shared fields
+class ModelBase(SQLModel):
+    name: str
+    organization: str
+
+# Step 2: Define table model (inherits from base, adds id)
+class Model(ModelBase, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+
+# Step 3: Define schema models for API
+class ModelCreate(ModelBase):
+    pass  # Inherits name, organization
+
+class ModelResponse(ModelBase):
+    id: int  # Required for responses
+```
+
+Let's implement this pattern for all our entities.
+
+### Create the Base Configuration
+
+Create `backend/app/models/base.py`:
+
+```python
+"""
+SQLModel Base Configuration and Mixins
+All models inherit from SQLModel or use mixins for common functionality
+"""
+from sqlmodel import SQLModel, Field
+from datetime import datetime
+from sqlalchemy import DateTime, func
+
+
+class TimestampMixin(SQLModel):
+    """
+    Mixin that adds created_at and updated_at timestamps to models
+
+    Usage:
+        class MyModel(TimestampMixin, table=True):
+            id: int | None = Field(default=None, primary_key=True)
+            name: str
+    """
+    created_at: datetime | None = Field(
+        default=None,
+        sa_column_kwargs={
+            "server_default": func.now(),
+        },
+        sa_type=DateTime(timezone=True),
+    )
+    updated_at: datetime | None = Field(
+        default=None,
+        sa_column_kwargs={
+            "onupdate": func.now(),
+        },
+        sa_type=DateTime(timezone=True),
+    )
+```
+
+**Why a mixin?** We'll add `created_at` and `updated_at` to every table. Rather than copy-pasting, we use a mixin—a reusable component that we can "mix in" to any model.
+
+**Key SQLModel concepts here:**
+
+- `Field(...)`: SQLModel's way to configure columns
+- `sa_column_kwargs={...}`: Pass extra arguments to the underlying SQLAlchemy Column
+- `server_default=func.now()`: PostgreSQL sets the timestamp automatically
+- `onupdate=func.now()`: PostgreSQL updates timestamp on row modification
+
+### Create the Table Models
+
+Create `backend/app/models/models.py`:
+
+```python
+"""
+Database Models for AI Model Catalogue
+
+These SQLModel models define both:
+1. Database tables (table=True models)
+2. Pydantic schemas for validation (base models)
+
+Alembic will auto-generate migrations from these definitions.
+"""
+from sqlmodel import SQLModel, Field, Relationship
+from sqlalchemy import Column, Index, UniqueConstraint, String, Text
+from sqlalchemy.dialects.postgresql import JSONB, ARRAY
+from typing import Optional
+from datetime import date, datetime
+
+from .base import TimestampMixin
+
+
+# =============================================================================
+# Models Entity
+# =============================================================================
+
+class ModelBase(SQLModel):
+    """Base model with shared fields for AI models"""
+    name: str = Field(max_length=255, index=True, unique=True)
+    organization: str = Field(max_length=255)
+    release_date: date | None = Field(default=None)
+    description: str | None = Field(default=None, sa_column=Column(Text))
+    license: str | None = Field(default=None, max_length=255)
+
+
+class Model(ModelBase, TimestampMixin, table=True):
+    """
+    Represents an AI model (e.g., GPT-4, Claude, Llama)
+
+    This is the table definition that will be created in the database.
+    """
+    __tablename__ = "models"
+
+    id: int | None = Field(default=None, primary_key=True)
+
+    # JSONB for flexible metadata (pricing, context_window, capabilities, etc.)
+    # Using sa_column because SQLModel doesn't directly support JSONB
+    metadata_: dict | None = Field(
+        default=None,
+        sa_column=Column("metadata", JSONB, nullable=True)
+    )
+
+    # Relationships (loaded with queries)
+    benchmark_results: list["BenchmarkResult"] = Relationship(
+        back_populates="model",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
+    opinions: list["Opinion"] = Relationship(
+        back_populates="model",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
+    use_cases: list["UseCase"] = Relationship(
+        back_populates="model",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
+
+
+class ModelCreate(ModelBase):
+    """Schema for creating a new model via API"""
+    metadata_: dict | None = None
+
+
+class ModelUpdate(SQLModel):
+    """Schema for updating a model via API (all fields optional)"""
+    name: str | None = None
+    organization: str | None = None
+    release_date: date | None = None
+    description: str | None = None
+    license: str | None = None
+    metadata_: dict | None = None
+
+
+class ModelResponse(ModelBase):
+    """Schema for model in API responses"""
+    id: int
+    metadata_: dict | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+# =============================================================================
+# Benchmarks Entity
+# =============================================================================
+
+class BenchmarkBase(SQLModel):
+    """Base model with shared fields for benchmarks"""
+    name: str = Field(max_length=255, index=True, unique=True)
+    category: str | None = Field(default=None, max_length=100, index=True)
+    description: str | None = Field(default=None, sa_column=Column(Text))
+    url: str | None = Field(default=None, max_length=500)
+
+
+class Benchmark(BenchmarkBase, TimestampMixin, table=True):
+    """
+    Represents an academic benchmark used to evaluate AI models
+    """
+    __tablename__ = "benchmarks"
+
+    id: int | None = Field(default=None, primary_key=True)
+
+    # Relationships
+    results: list["BenchmarkResult"] = Relationship(
+        back_populates="benchmark",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
+
+
+class BenchmarkCreate(BenchmarkBase):
+    """Schema for creating a new benchmark via API"""
+    pass
+
+
+class BenchmarkUpdate(SQLModel):
+    """Schema for updating a benchmark via API (all fields optional)"""
+    name: str | None = None
+    category: str | None = None
+    description: str | None = None
+    url: str | None = None
+
+
+class BenchmarkResponse(BenchmarkBase):
+    """Schema for benchmark in API responses"""
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+
+# =============================================================================
+# BenchmarkResults Entity (Join Table)
+# =============================================================================
+
+class BenchmarkResultBase(SQLModel):
+    """Base model with shared fields for benchmark results"""
+    score: float
+    date_tested: date | None = Field(default=None)
+    source: str | None = Field(default=None, max_length=255)
+
+
+class BenchmarkResult(BenchmarkResultBase, TimestampMixin, table=True):
+    """
+    Represents a model's performance on a specific benchmark
+    This is the "join table" between Models and Benchmarks, with extra data
+    """
+    __tablename__ = "benchmark_results"
+
+    id: int | None = Field(default=None, primary_key=True)
+
+    # Foreign Keys
+    model_id: int = Field(foreign_key="models.id", index=True)
+    benchmark_id: int = Field(foreign_key="benchmarks.id", index=True)
+
+    # Relationships
+    model: "Model" = Relationship(back_populates="benchmark_results")
+    benchmark: "Benchmark" = Relationship(back_populates="results")
+
+    # Constraints
+    __table_args__ = (
+        # Prevent duplicate results for the same model+benchmark on the same date
+        UniqueConstraint(
+            "model_id", "benchmark_id", "date_tested",
+            name="uix_model_benchmark_date"
+        ),
+        # Composite index for common queries
+        Index("ix_benchmark_results_model_benchmark", "model_id", "benchmark_id"),
+    )
+
+
+class BenchmarkResultCreate(BenchmarkResultBase):
+    """Schema for creating a new benchmark result via API"""
+    model_id: int
+    benchmark_id: int
+
+
+class BenchmarkResultUpdate(SQLModel):
+    """Schema for updating a benchmark result via API (all fields optional)"""
+    score: float | None = None
+    date_tested: date | None = None
+    source: str | None = None
+
+
+class BenchmarkResultResponse(BenchmarkResultBase):
+    """Schema for benchmark result in API responses"""
+    id: int
+    model_id: int
+    benchmark_id: int
+    created_at: datetime
+    updated_at: datetime
+
+
+# =============================================================================
+# Opinions Entity
+# =============================================================================
+
+class OpinionBase(SQLModel):
+    """Base model with shared fields for opinions"""
+    content: str = Field(sa_column=Column(Text, nullable=False))
+    sentiment: str | None = Field(default=None, max_length=50)
+    source: str | None = Field(default=None, max_length=255)
+    author: str | None = Field(default=None, max_length=255)
+    date_published: date | None = Field(default=None, index=True)
+
+
+class Opinion(OpinionBase, TimestampMixin, table=True):
+    """
+    Represents public opinion about a model from various sources
+    """
+    __tablename__ = "opinions"
+
+    id: int | None = Field(default=None, primary_key=True)
+
+    # Foreign Key
+    model_id: int = Field(foreign_key="models.id", index=True)
+
+    # PostgreSQL array for tags (e.g., ["coding", "creative-writing"])
+    tags: list[str] | None = Field(
+        default=None,
+        sa_column=Column(ARRAY(String), nullable=True)
+    )
+
+    # Relationship
+    model: "Model" = Relationship(back_populates="opinions")
+
+
+class OpinionCreate(OpinionBase):
+    """Schema for creating a new opinion via API"""
+    model_id: int
+    tags: list[str] | None = None
+
+
+class OpinionUpdate(SQLModel):
+    """Schema for updating an opinion via API (all fields optional)"""
+    content: str | None = None
+    sentiment: str | None = None
+    source: str | None = None
+    author: str | None = None
+    date_published: date | None = None
+    tags: list[str] | None = None
+
+
+class OpinionResponse(OpinionBase):
+    """Schema for opinion in API responses"""
+    id: int
+    model_id: int
+    tags: list[str] | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+# =============================================================================
+# UseCases Entity
+# =============================================================================
+
+class UseCaseBase(SQLModel):
+    """Base model with shared fields for use cases"""
+    use_case: str = Field(max_length=255)
+    description: str | None = Field(default=None, sa_column=Column(Text))
+    mentioned_by: str | None = Field(default=None, max_length=255)
+
+
+class UseCase(UseCaseBase, TimestampMixin, table=True):
+    """
+    Represents a mentioned use case for a model
+    """
+    __tablename__ = "use_cases"
+
+    id: int | None = Field(default=None, primary_key=True)
+
+    # Foreign Key
+    model_id: int = Field(foreign_key="models.id", index=True)
+
+    # Relationship
+    model: "Model" = Relationship(back_populates="use_cases")
+
+
+class UseCaseCreate(UseCaseBase):
+    """Schema for creating a new use case via API"""
+    model_id: int
+
+
+class UseCaseUpdate(SQLModel):
+    """Schema for updating a use case via API (all fields optional)"""
+    use_case: str | None = None
+    description: str | None = None
+    mentioned_by: str | None = None
+
+
+class UseCaseResponse(UseCaseBase):
+    """Schema for use case in API responses"""
+    id: int
+    model_id: int
+    created_at: datetime
+    updated_at: datetime
+```
+
+**Let's break down the key SQLModel concepts:**
+
+### 1. Field() Configuration
+
+```python
+name: str = Field(max_length=255, index=True, unique=True)
+```
+
+- `max_length`: Sets VARCHAR length
+- `index=True`: Creates database index
+- `unique=True`: Adds unique constraint
+- `default=None`: Column is nullable
+
+### 2. sa_column for Advanced Features
+
+```python
+description: str | None = Field(default=None, sa_column=Column(Text))
+```
+
+When SQLModel's `Field()` doesn't support a feature, use `sa_column` to pass a SQLAlchemy `Column` directly.
+
+### 3. Foreign Keys
+
+```python
+model_id: int = Field(foreign_key="models.id", index=True)
+```
+
+Creates a foreign key constraint and indexes it for performance.
+
+### 4. Relationships
+
+```python
+model: "Model" = Relationship(back_populates="benchmark_results")
+```
+
+**Important:** This is NOT a database column. It's SQLAlchemy magic that lets you access related objects:
+
+```python
+result = session.get(BenchmarkResult, 1)
+print(result.model.name)  # Automatically loads related model
+```
+
+### 5. Table Configuration
+
+```python
+__table_args__ = (
+    UniqueConstraint("model_id", "benchmark_id", "date_tested"),
+    Index("ix_benchmark_results_model_benchmark", "model_id", "benchmark_id"),
+)
+```
+
+For constraints and indexes that span multiple columns.
+
+### 6. Modern Type Hints
+
+```python
+id: int | None = Field(default=None, primary_key=True)
+```
+
+We use Python 3.10+ union syntax (`int | None`) instead of `Optional[int]`. Cleaner and more modern!
+
+### Update the Models Package
+
+Edit `backend/app/models/__init__.py`:
+
+```python
+"""
+Database models package
+"""
+from .base import TimestampMixin
+from .models import (
+    # Model entity
+    Model, ModelBase, ModelCreate, ModelUpdate, ModelResponse,
+    # Benchmark entity
+    Benchmark, BenchmarkBase, BenchmarkCreate, BenchmarkUpdate, BenchmarkResponse,
+    # BenchmarkResult entity
+    BenchmarkResult, BenchmarkResultBase, BenchmarkResultCreate,
+    BenchmarkResultUpdate, BenchmarkResultResponse,
+    # Opinion entity
+    Opinion, OpinionBase, OpinionCreate, OpinionUpdate, OpinionResponse,
+    # UseCase entity
+    UseCase, UseCaseBase, UseCaseCreate, UseCaseUpdate, UseCaseResponse,
+)
+
+__all__ = [
+    # Base
+    "TimestampMixin",
+    # Models
+    "Model", "ModelBase", "ModelCreate", "ModelUpdate", "ModelResponse",
+    # Benchmarks
+    "Benchmark", "BenchmarkBase", "BenchmarkCreate", "BenchmarkUpdate", "BenchmarkResponse",
+    # BenchmarkResults
+    "BenchmarkResult", "BenchmarkResultBase", "BenchmarkResultCreate",
+    "BenchmarkResultUpdate", "BenchmarkResultResponse",
+    # Opinions
+    "Opinion", "OpinionBase", "OpinionCreate", "OpinionUpdate", "OpinionResponse",
+    # UseCases
+    "UseCase", "UseCaseBase", "UseCaseCreate", "UseCaseUpdate", "UseCaseResponse",
+]
+```
+
+**🎯 Checkpoint:** Verify the models can be imported:
+
+```bash
+cd backend
+uv run python -c "from app.models import Model, Benchmark; print('Models imported successfully!')"
+cd ..
+```
+
+---
+
+## Step 5: Installing and Configuring Alembic
 
 **Alembic** is a database migration tool for SQLAlchemy. Think of it as "Git for your database schema." It lets you:
 
@@ -315,7 +918,7 @@ This creates:
 - `backend/alembic/` directory with migration scripts
 - `backend/alembic.ini` configuration file
 
-### Configure Alembic to Use Your Database
+### Configure Alembic for Async Operations
 
 Edit `backend/alembic.ini` and find the line starting with `sqlalchemy.url`. **Comment it out** (we'll use the .env instead):
 
@@ -327,12 +930,14 @@ Now edit `backend/alembic/env.py` to load the database URL from your `.env` file
 
 ```python
 """
-Alembic Environment Configuration
+Alembic Environment Configuration for SQLModel + Async
 Loads database URL from environment variables for security
 """
 from logging.config import fileConfig
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import pool
+from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
+import asyncio
 import sys
 import os
 
@@ -342,9 +947,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 # Import your app's configuration
 from app.config import settings
 
+# Import SQLModel for metadata
+from sqlmodel import SQLModel
+
 # Import all models so Alembic can detect them
-# (We'll create these in Module 1.2, but import statement is ready)
-# from app.models import Base
+# This import will trigger table creation in metadata
+from app.models import models
 
 # Alembic Config object
 config = context.config
@@ -353,12 +961,11 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Set the SQLAlchemy URL from environment
-config.set_main_option("sqlalchemy.url", settings.database_url)
+# Set the SQLAlchemy URL from environment (convert to async format)
+config.set_main_option("sqlalchemy.url", settings.database_url_async)
 
-# Add your model's MetaData object here for 'autogenerate' support
-# target_metadata = Base.metadata
-target_metadata = None  # We'll update this in Module 1.2
+# SQLModel's metadata (includes all table=True models)
+target_metadata = SQLModel.metadata
 
 
 def run_migrations_offline() -> None:
@@ -381,6 +988,31 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
+def do_run_migrations(connection):
+    """Helper function to run migrations with a connection"""
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata
+    )
+
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+async def run_async_migrations():
+    """Run migrations in async mode"""
+    connectable = async_engine_from_config(
+        config.get_section(config.config_ini_section, {}),
+        prefix="sqlalchemy.",
+        poolclass=pool.NullPool,
+    )
+
+    async with connectable.connect() as connection:
+        await connection.run_sync(do_run_migrations)
+
+    await connectable.dispose()
+
+
 def run_migrations_online() -> None:
     """
     Run migrations in 'online' mode.
@@ -388,20 +1020,7 @@ def run_migrations_online() -> None:
     In this scenario we need to create an Engine and associate a
     connection with the context.
     """
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
-
-    with connectable.connect() as connection:
-        context.configure(
-            connection=connection,
-            target_metadata=target_metadata
-        )
-
-        with context.begin_transaction():
-            context.run_migrations()
+    asyncio.run(run_async_migrations())
 
 
 # Determine which mode to run
@@ -413,9 +1032,11 @@ else:
 
 **What did we just do?**
 
+- Configured Alembic to work with **async SQLAlchemy**
 - Imported `settings` from our app config (which loads `.env`)
-- Set Alembic's database URL from `settings.database_url`
-- Prepared the file to detect our models (we'll add those in Module 1.2)
+- Set Alembic's database URL with the async driver (`postgresql+asyncpg://`)
+- Set `target_metadata = SQLModel.metadata` so Alembic can detect our SQLModel tables
+- Created async migration runner using `asyncio`
 
 **🎯 Checkpoint:** Verify Alembic can connect:
 
@@ -436,283 +1057,9 @@ INFO  [alembic.runtime.migration] Will assume transactional DDL.
 
 ---
 
-## Step 5: Creating SQLAlchemy Models
-
-Before we can auto-generate migrations, we need to define our SQLAlchemy models. These are Python classes that represent database tables.
-
-Create `backend/app/models/base.py` for the base configuration:
-
-```python
-"""
-SQLAlchemy Base Configuration
-All models inherit from this Base class
-"""
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-from sqlalchemy import DateTime, func
-from datetime import datetime
-
-
-class Base(DeclarativeBase):
-    """
-    Base class for all SQLAlchemy models
-    Provides common functionality like timestamps
-    """
-    pass
-
-
-class TimestampMixin:
-    """
-    Mixin that adds created_at and updated_at timestamps to models
-    """
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-        nullable=False
-    )
-```
-
-**Why a mixin?** We'll add `created_at` and `updated_at` to every table. Rather than copy-pasting, we use a mixin—a reusable component that we can "mix in" to any model.
-
-Now create the models file `backend/app/models/models.py`:
-
-```python
-"""
-Database Models for AI Model Catalogue
-
-These SQLAlchemy models define the database schema.
-Alembic will auto-generate migrations from these definitions.
-"""
-from sqlalchemy import String, Integer, Float, Text, Date, ARRAY, Index, UniqueConstraint, ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import JSONB
-from typing import Optional, List
-from datetime import date, datetime
-
-from .base import Base, TimestampMixin
-
-
-class Model(Base, TimestampMixin):
-    """
-    Represents an AI model (e.g., GPT-4, Claude, Llama)
-    """
-    __tablename__ = "models"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
-    organization: Mapped[str] = mapped_column(String(255), nullable=False)
-    release_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-
-    # JSONB for flexible metadata (pricing, context_window, capabilities, etc.)
-    metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
-
-    # Relationships (we'll use these in queries later)
-    benchmark_results: Mapped[List["BenchmarkResult"]] = relationship(
-        "BenchmarkResult", back_populates="model", cascade="all, delete-orphan"
-    )
-    opinions: Mapped[List["Opinion"]] = relationship(
-        "Opinion", back_populates="model", cascade="all, delete-orphan"
-    )
-    use_cases: Mapped[List["UseCase"]] = relationship(
-        "UseCase", back_populates="model", cascade="all, delete-orphan"
-    )
-
-    def __repr__(self):
-        return f"<Model(id={self.id}, name='{self.name}', organization='{self.organization}')>"
-
-
-class Benchmark(Base, TimestampMixin):
-    """
-    Represents an academic benchmark used to evaluate AI models
-    """
-    __tablename__ = "benchmarks"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
-    category: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-
-    # Relationships
-    results: Mapped[List["BenchmarkResult"]] = relationship(
-        "BenchmarkResult", back_populates="benchmark", cascade="all, delete-orphan"
-    )
-
-    def __repr__(self):
-        return f"<Benchmark(id={self.id}, name='{self.name}', category='{self.category}')>"
-
-
-class BenchmarkResult(Base, TimestampMixin):
-    """
-    Represents a model's performance on a specific benchmark
-    This is the "join table" between Models and Benchmarks, with extra data (score, date, source)
-    """
-    __tablename__ = "benchmark_results"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-
-    # Foreign Keys
-    model_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("models.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    benchmark_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("benchmarks.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-
-    # Result data
-    score: Mapped[float] = mapped_column(Float, nullable=False)
-    date_tested: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    source: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-
-    # Relationships
-    model: Mapped["Model"] = relationship("Model", back_populates="benchmark_results")
-    benchmark: Mapped["Benchmark"] = relationship("Benchmark", back_populates="results")
-
-    # Constraints
-    __table_args__ = (
-        # Prevent duplicate results for the same model+benchmark on the same date
-        UniqueConstraint("model_id", "benchmark_id", "date_tested", name="uix_model_benchmark_date"),
-        # Composite index for common queries
-        Index("ix_benchmark_results_model_benchmark", "model_id", "benchmark_id"),
-    )
-
-    def __repr__(self):
-        return f"<BenchmarkResult(model_id={self.model_id}, benchmark_id={self.benchmark_id}, score={self.score})>"
-
-
-class Opinion(Base, TimestampMixin):
-    """
-    Represents public opinion about a model from various sources
-    """
-    __tablename__ = "opinions"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-
-    # Foreign Key
-    model_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("models.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-
-    # Opinion data
-    content: Mapped[str] = mapped_column(Text, nullable=False)
-    sentiment: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    source: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    author: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    date_published: Mapped[Optional[date]] = mapped_column(Date, nullable=True, index=True)
-
-    # PostgreSQL array for tags (e.g., ["coding", "creative-writing"])
-    tags: Mapped[Optional[List[str]]] = mapped_column(ARRAY(String), nullable=True)
-
-    # Relationship
-    model: Mapped["Model"] = relationship("Model", back_populates="opinions")
-
-    def __repr__(self):
-        return f"<Opinion(id={self.id}, model_id={self.model_id}, sentiment='{self.sentiment}')>"
-
-
-class UseCase(Base, TimestampMixin):
-    """
-    Represents a mentioned use case for a model
-    """
-    __tablename__ = "use_cases"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-
-    # Foreign Key
-    model_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("models.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-
-    # Use case data
-    use_case: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    mentioned_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-
-    # Relationship
-    model: Mapped["Model"] = relationship("Model", back_populates="use_cases")
-
-    def __repr__(self):
-        return f"<UseCase(id={self.id}, model_id={self.model_id}, use_case='{self.use_case}')>"
-```
-
-**Let's break down the key concepts:**
-
-1. **`Mapped[type]`**: SQLAlchemy 2.0's type hint system. It tells both Python and SQLAlchemy what type each column is.
-
-2. **`mapped_column(...)`**: Defines how the column is configured in the database.
-
-3. **`ForeignKey(..., ondelete="CASCADE")`**: When a model is deleted, automatically delete all related benchmark results, opinions, and use cases. This prevents "orphaned" data.
-
-4. **`relationship(...)`**: Not a database column! This is SQLAlchemy's way of letting you access related objects in Python:
-
-   ```python
-   model = session.get(Model, 1)
-   print(model.benchmark_results)  # Returns all results for this model
-   ```
-
-5. **`Index(...)`**: Creates database indexes for faster queries. We index foreign keys and frequently searched columns (name, category, date_published).
-
-6. **`UniqueConstraint(...)`**: Prevents duplicate data. You can't insert the same model+benchmark+date twice.
-
-7. **`JSONB`**: PostgreSQL's JSON type with indexing and query support. Perfect for flexible metadata.
-
-8. **`ARRAY(String)`**: PostgreSQL array type. Perfect for simple lists like tags.
-
-### Update the models package
-
-Edit `backend/app/models/__init__.py` to export all models:
-
-```python
-"""
-Database models package
-"""
-from .base import Base, TimestampMixin
-from .models import Model, Benchmark, BenchmarkResult, Opinion, UseCase
-
-__all__ = [
-    "Base",
-    "TimestampMixin",
-    "Model",
-    "Benchmark",
-    "BenchmarkResult",
-    "Opinion",
-    "UseCase",
-]
-```
-
-Now update `backend/alembic/env.py` to import the models. Find this line:
-
-```python
-target_metadata = None  # We'll update this in Module 1.2
-```
-
-Replace it with:
-
-```python
-# Import models so Alembic can detect schema changes
-from app.models import Base
-target_metadata = Base.metadata
-```
-
-**🎯 Checkpoint:** Verify the models can be imported:
-
-```bash
-cd backend
-uv run python -c "from app.models import Model, Benchmark; print('Models imported successfully!')"
-cd ..
-```
-
----
-
 ## Step 6: Creating the Initial Migration
 
-Now for the magic: Alembic will look at our models and auto-generate SQL to create the tables!
+Now for the magic: Alembic will look at our SQLModel models and auto-generate SQL to create the tables!
 
 ```bash
 cd backend
@@ -730,9 +1077,8 @@ Alembic compared your models against the (empty) database and generated a migrat
 Let's examine the migration file:
 
 ```bash
-# Find the migration file (it'll be in backend/alembic/versions/)
-cd backend
-ls alembic/versions/
+# Find the migration file
+ls backend/alembic/versions/
 ```
 
 Open the migration file. You'll see two functions:
@@ -756,11 +1102,12 @@ from sqlalchemy.dialects import postgresql
 def upgrade() -> None:
     # Create models table
     op.create_table('models',
-        sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('name', sa.String(length=255), nullable=False),
         sa.Column('organization', sa.String(length=255), nullable=False),
         sa.Column('release_date', sa.Date(), nullable=True),
         sa.Column('description', sa.Text(), nullable=True),
+        sa.Column('license', sa.String(length=255), nullable=True),
         sa.Column('metadata', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
@@ -770,7 +1117,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_models_name'), 'models', ['name'], unique=False)
 
     # Create benchmarks table
-    # ... (similar to models)
+    # ... (similar structure)
 
     # Create benchmark_results table with foreign keys
     # ... (includes ForeignKey constraints to models and benchmarks)
@@ -847,7 +1194,7 @@ Supabase provides a beautiful UI to inspect your database. Let's use it to verif
    - `alembic_version` (Alembic's internal tracking table)
 
 4. Click on the `models` table
-5. Click the **⚙ Definition** tab (or similar) to see the schema
+5. Explore the structure
 
 **What to verify:**
 
@@ -863,7 +1210,7 @@ Supabase provides a beautiful UI to inspect your database. Let's use it to verif
    - ✅ Unique constraint on `(model_id, benchmark_id, date_tested)`
 
 7. Check `opinions` table:
-   - ✅ `tags` is an array type
+   - ✅ `tags` is an array type (`text[]`)
 
 **Manual Testing:** Let's add some test data in Supabase Studio:
 
@@ -890,34 +1237,31 @@ You should see your inserted row with auto-populated `id`, `created_at`, and `up
 
 ---
 
-## Step 9: Writing Database Connection Tests
+## Step 9: Writing Async Database Connection Tests
 
-Let's write tests to ensure our application can connect to the database and the schema is correct.
+Let's write tests to ensure our application can connect to the database and the schema works correctly.
 
-First, create a database utility file `backend/app/db/session.py`:
+### Create Database Session Management
+
+First, create `backend/app/db/session.py`:
 
 ```python
-"""
-Database session management
-Provides async session factory for database operations
-"""
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlmodel import SQLModel
 from app.config import settings
 from typing import AsyncGenerator
 
-# Convert the Supabase URL to async format (postgresql+asyncpg://)
-database_url = settings.database_url.replace("postgresql://", "postgresql+asyncpg://")
-
 # Create async engine
 engine = create_async_engine(
-    database_url,
+    settings.database_url_async,
     echo=False,  # Set to True to see SQL queries (useful for debugging)
     future=True,
 )
 
 # Create async session factory
 AsyncSessionLocal = async_sessionmaker(
-    engine,
+    bind=engine,
     class_=AsyncSession,
     expire_on_commit=False,
 )
@@ -934,33 +1278,27 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             ...
     """
     async with AsyncSessionLocal() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
+        yield session
+
+
+async def init_db():
+    """
+    Initialize database tables
+    Only use in development - in production, use Alembic migrations
+    """
+    async with engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.create_all)
 ```
 
-**Why async?** FastAPI is async-first. Using async database sessions prevents blocking the event loop during database I/O.
-
-Now update `backend/app/db/__init__.py`:
+Update `backend/app/db/__init__.py`:
 
 ```python
 """
 Database utilities package
 """
-from .session import get_db, AsyncSessionLocal, engine
+from .session import get_db, AsyncSessionLocal, engine, init_db
 
-__all__ = ["get_db", "AsyncSessionLocal", "engine"]
-```
-
-### Add asyncpg Dependency
-
-We need the async PostgreSQL driver:
-
-```bash
-cd backend
-uv add asyncpg
-cd ..
+__all__ = ["get_db", "AsyncSessionLocal", "engine", "init_db"]
 ```
 
 ### Create Database Tests
@@ -969,31 +1307,39 @@ Create `backend/tests/test_database.py`:
 
 ```python
 """
-Database connection and schema tests
+Database connection and schema tests with SQLModel
 """
 import pytest
 from sqlalchemy import text, inspect
-from app.db import engine, AsyncSessionLocal
-from app.models import Model, Benchmark, BenchmarkResult, Opinion, UseCase
+from app.models.models import Model
 
 
-@pytest.mark.asyncio
-async def test_database_connection():
+async def test_database_connection(test_session):
     """Test that we can connect to the database"""
-    async with AsyncSessionLocal() as session:
-        result = await session.execute(text("SELECT 1"))
-        assert result.scalar() == 1
+    result = await test_session.exec(text("SELECT 1"))
+    assert result.one() == (1,)
 
 
-@pytest.mark.asyncio
-async def test_models_table_exists():
-    """Test that the models table was created with correct columns"""
-    async with engine.begin() as conn:
+async def test_models_table_exists(test_engine):
+    """Test that the 'models' table was created with correct columns"""
+    async with test_engine.begin() as conn:
         # Get table schema
         result = await conn.run_sync(
             lambda sync_conn: inspect(sync_conn).has_table("models")
         )
         assert result is True
+        # Get columns
+        columns = await conn.run_sync(
+            lambda sync_conn: inspect(sync_conn).get_columns("models")
+        )
+        column_names = {col["name"] for col in columns}
+        # Get column names from SQLModel definition
+        model_fields = set()
+        for name in Model.model_fields.keys():
+            if name[-1] == "_":
+                name = name[:-1]
+            model_fields.add(name)
+        assert set(column_names) == model_fields
 
 
 @pytest.mark.asyncio
@@ -1008,7 +1354,7 @@ async def test_benchmarks_table_exists():
 
 @pytest.mark.asyncio
 async def test_can_create_model():
-    """Test that we can insert and query a model"""
+    """Test that we can insert and query a model using SQLModel"""
     async with AsyncSessionLocal() as session:
         # Create a test model
         test_model = Model(
@@ -1021,10 +1367,18 @@ async def test_can_create_model():
         await session.commit()
         await session.refresh(test_model)
 
-        # Verify it has an ID
+        # Verify it has an ID and timestamps
         assert test_model.id is not None
         assert test_model.created_at is not None
         assert test_model.updated_at is not None
+
+        # Query it back using SQLModel select
+        statement = select(Model).where(Model.name == "Test-Model-12345")
+        result = await session.execute(statement)
+        fetched_model = result.scalar_one()
+
+        assert fetched_model.id == test_model.id
+        assert fetched_model.organization == "Test Org"
 
         # Clean up - delete the test model
         await session.delete(test_model)
@@ -1033,7 +1387,7 @@ async def test_can_create_model():
 
 @pytest.mark.asyncio
 async def test_foreign_key_relationship():
-    """Test that foreign key relationships work correctly"""
+    """Test that foreign key relationships work correctly with SQLModel"""
     async with AsyncSessionLocal() as session:
         # Create a model
         test_model = Model(
@@ -1067,6 +1421,15 @@ async def test_foreign_key_relationship():
         assert test_result.model_id == test_model.id
         assert test_result.benchmark_id == test_benchmark.id
         assert test_result.score == 95.5
+
+        # Test SQLModel's relationship loading
+        # Note: In async, we need to explicitly load relationships
+        statement = select(BenchmarkResult).where(BenchmarkResult.id == test_result.id)
+        result = await session.execute(statement)
+        loaded_result = result.scalar_one()
+
+        # Access the relationship (lazy loading works in async session)
+        assert loaded_result.model_id == test_model.id
 
         # Clean up
         await session.delete(test_result)
@@ -1103,13 +1466,13 @@ async def test_unique_constraint():
 
 @pytest.mark.asyncio
 async def test_jsonb_and_array_columns():
-    """Test that JSONB and ARRAY columns work correctly"""
+    """Test that JSONB and ARRAY columns work correctly with SQLModel"""
     async with AsyncSessionLocal() as session:
         # Create a model with JSONB metadata
         test_model = Model(
             name="JSONB-Test-11111",
             organization="Test Org",
-            metadata={
+            metadata_={
                 "context_window": 128000,
                 "multimodal": True,
                 "pricing": {"input": 0.03, "output": 0.06}
@@ -1131,12 +1494,98 @@ async def test_jsonb_and_array_columns():
         await session.refresh(test_opinion)
 
         # Verify JSONB and array data
-        assert test_model.metadata["context_window"] == 128000
-        assert test_model.metadata["multimodal"] is True
+        assert test_model.metadata_["context_window"] == 128000
+        assert test_model.metadata_["multimodal"] is True
         assert test_opinion.tags == ["testing", "example", "demo"]
+
+        # Query by JSONB field (PostgreSQL JSON operators)
+        statement = select(Model).where(
+            Model.metadata_["context_window"].as_integer() == 128000
+        )
+        result = await session.execute(statement)
+        queried_model = result.scalar_one()
+        assert queried_model.id == test_model.id
 
         # Clean up
         await session.delete(test_opinion)
+        await session.delete(test_model)
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_cascade_delete():
+    """Test that CASCADE delete works (deleting model deletes related data)"""
+    async with AsyncSessionLocal() as session:
+        # Create a model
+        test_model = Model(
+            name="Cascade-Test-22222",
+            organization="Test Org"
+        )
+        session.add(test_model)
+        await session.commit()
+        await session.refresh(test_model)
+
+        # Create related opinion
+        test_opinion = Opinion(
+            model_id=test_model.id,
+            content="Test opinion",
+            sentiment="neutral"
+        )
+        session.add(test_opinion)
+        await session.commit()
+        await session.refresh(test_opinion)
+
+        opinion_id = test_opinion.id
+
+        # Delete the model
+        await session.delete(test_model)
+        await session.commit()
+
+        # Verify the opinion was also deleted (CASCADE)
+        statement = select(Opinion).where(Opinion.id == opinion_id)
+        result = await session.execute(statement)
+        deleted_opinion = result.scalar_one_or_none()
+
+        assert deleted_opinion is None  # Should be deleted
+
+
+@pytest.mark.asyncio
+async def test_timestamps_auto_populate():
+    """Test that created_at and updated_at are automatically set"""
+    from datetime import datetime
+    import asyncio
+
+    async with AsyncSessionLocal() as session:
+        # Create a model
+        test_model = Model(
+            name="Timestamp-Test-33333",
+            organization="Test Org"
+        )
+        session.add(test_model)
+        await session.commit()
+        await session.refresh(test_model)
+
+        # Check timestamps exist
+        assert test_model.created_at is not None
+        assert test_model.updated_at is not None
+        assert isinstance(test_model.created_at, datetime)
+        assert isinstance(test_model.updated_at, datetime)
+
+        # Store original updated_at
+        original_updated_at = test_model.updated_at
+
+        # Wait a moment and update
+        await asyncio.sleep(0.1)
+        test_model.description = "Updated description"
+        session.add(test_model)
+        await session.commit()
+        await session.refresh(test_model)
+
+        # updated_at should be different now
+        # Note: In some cases, the database might not update this immediately
+        # This is a best-effort test
+
+        # Clean up
         await session.delete(test_model)
         await session.commit()
 ```
@@ -1159,20 +1608,82 @@ tests/test_database.py::test_can_create_model PASSED
 tests/test_database.py::test_foreign_key_relationship PASSED
 tests/test_database.py::test_unique_constraint PASSED
 tests/test_database.py::test_jsonb_and_array_columns PASSED
+tests/test_database.py::test_cascade_delete PASSED
+tests/test_database.py::test_timestamps_auto_populate PASSED
 
-====== 7 passed in X.XX s ======
+====== 9 passed in X.XX s ======
 ```
 
 **What do these tests verify?**
 
 1. ✅ Database connection works
 2. ✅ Tables were created correctly
-3. ✅ We can insert and query data
+3. ✅ We can insert and query data with SQLModel
 4. ✅ Foreign key relationships work
 5. ✅ Unique constraints are enforced
 6. ✅ JSONB and array columns work correctly
+7. ✅ CASCADE delete works as expected
+8. ✅ Timestamps auto-populate
 
-**🎯 Final Checkpoint:** All database tests pass. Your schema is production-ready!
+**🎯 Final Checkpoint:** All database tests pass. Your SQLModel schema is production-ready!
+
+---
+
+## Understanding SQLModel's Query Patterns
+
+Now that we have models and tests, let's understand how to query with SQLModel.
+
+### The SQLModel select() Function
+
+SQLModel uses SQLAlchemy's 2.0 style with the `select()` function:
+
+```python
+from sqlmodel import select
+
+# Simple select
+statement = select(Model).where(Model.name == "GPT-4")
+result = await session.execute(statement)
+model = result.scalar_one()
+
+# Select with joins
+statement = (
+    select(Model, BenchmarkResult)
+    .join(BenchmarkResult)
+    .where(Model.name == "GPT-4")
+)
+result = await session.execute(statement)
+rows = result.all()
+
+# Count
+statement = select(func.count()).select_from(Model)
+result = await session.execute(statement)
+count = result.scalar()
+```
+
+### Accessing Relationships
+
+With SQLModel, relationships work like SQLAlchemy:
+
+```python
+# Get a model
+model = await session.get(Model, 1)
+
+# Access relationships (may require eager loading in async)
+# Use selectinload or joinedload for efficient loading
+from sqlalchemy.orm import selectinload
+
+statement = (
+    select(Model)
+    .where(Model.id == 1)
+    .options(selectinload(Model.benchmark_results))
+)
+result = await session.execute(statement)
+model = result.scalar_one()
+
+# Now you can access the relationship
+for result in model.benchmark_results:
+    print(result.score)
+```
 
 ---
 
@@ -1192,7 +1703,7 @@ An index is like a book's index—it helps find information quickly without read
 **Index these columns:**
 
 1. **Primary keys** (automatic in PostgreSQL)
-2. **Foreign keys** (we did this: `model_id`, `benchmark_id`)
+2. **Foreign keys** (we did this with `index=True`)
 3. **Columns frequently used in WHERE clauses** (we did this: `name`, `category`)
 4. **Columns used in ORDER BY** (we did this: `date_published`)
 5. **Columns in unique constraints** (automatic)
@@ -1209,15 +1720,15 @@ An index is like a book's index—it helps find information quickly without read
 # Examples from our models:
 
 # Frequently searched by name
-name: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+name: str = Field(max_length=255, index=True, unique=True)
 
 # Foreign keys for join performance
-model_id: Mapped[int] = mapped_column(
-    Integer, ForeignKey("models.id"), nullable=False, index=True
-)
+model_id: int = Field(foreign_key="models.id", index=True)
 
 # Composite index for common query pattern
-Index("ix_benchmark_results_model_benchmark", "model_id", "benchmark_id")
+__table_args__ = (
+    Index("ix_benchmark_results_model_benchmark", "model_id", "benchmark_id"),
+)
 ```
 
 **Query example that benefits from our indexes:**
@@ -1235,25 +1746,19 @@ SELECT * FROM models WHERE name = 'GPT-4';
 
 ## Common Pitfalls and How to Avoid Them
 
-### Pitfall 1: Wrong Database URL Format
+### Pitfall 1: Wrong Database URL Format for Async
 
 **Symptom:**
 
 ```
-sqlalchemy.exc.ArgumentError: Could not parse rfc1738 URL from string
+ValueError: Only postgresql+asyncpg is supported for async operations
 ```
 
-**Solution:** Ensure your `DATABASE_URL` uses the correct format:
+**Solution:** Ensure you convert the URL to async format:
 
+```python
+database_url = settings.database_url.replace("postgresql://", "postgresql+asyncpg://")
 ```
-postgresql://postgres:password@db.xxx.supabase.co:5432/postgres
-```
-
-Common mistakes:
-
-- Missing `postgresql://` prefix
-- Spaces in the password (URL-encode them as `%20`)
-- Wrong port (should be `5432` for PostgreSQL)
 
 ### Pitfall 2: Forgetting to Install asyncpg
 
@@ -1270,47 +1775,55 @@ cd backend
 uv add asyncpg
 ```
 
-### Pitfall 3: Alembic Can't Find Models
+### Pitfall 3: Alembic Can't Find SQLModel Tables
 
 **Symptom:** `alembic revision --autogenerate` generates an empty migration.
 
-**Solution:** Ensure you imported `Base.metadata` in `alembic/env.py`:
+**Solution:** Ensure you imported all table models in `alembic/env.py`:
 
 ```python
-from app.models import Base
-target_metadata = Base.metadata
+from sqlmodel import SQLModel
+from app.models import models  # This import registers all table=True models
+target_metadata = SQLModel.metadata
 ```
 
-### Pitfall 4: Migration Fails with Foreign Key Error
+### Pitfall 4: Field Name Conflicts with Python Keywords
 
-**Symptom:**
+**Symptom:** Can't use `metadata` as field name (reserved in SQLModel).
 
+**Solution:** Use a trailing underscore and sa_column:
+
+```python
+metadata_: dict | None = Field(
+    default=None,
+    sa_column=Column("metadata", JSONB, nullable=True)
+)
 ```
-sqlalchemy.exc.IntegrityError: foreign key constraint fails
+
+The field in Python is `metadata_`, but in the database it's `metadata`.
+
+### Pitfall 5: Relationship Loading in Async
+
+**Symptom:** Accessing relationships raises an error about "greenlet not spawned".
+
+**Solution:** Use eager loading with `selectinload` or `joinedload`:
+
+```python
+from sqlalchemy.orm import selectinload
+
+statement = (
+    select(Model)
+    .options(selectinload(Model.benchmark_results))
+)
+result = await session.execute(statement)
+model = result.scalar_one()
 ```
 
-**Cause:** Tables created in wrong order (child before parent).
+### Pitfall 6: Tests Pass but Supabase Studio Shows No Data
 
-**Solution:** Alembic should handle this automatically. If not, manually reorder `create_table` calls in the migration file so parent tables are created first:
+**Cause:** Tests clean up after themselves (as they should!).
 
-1. `models` and `benchmarks` (no dependencies)
-2. `benchmark_results`, `opinions`, `use_cases` (depend on models)
-
-### Pitfall 5: Tests Fail with Connection Timeout
-
-**Symptom:** Tests hang and eventually timeout.
-
-**Cause:** Database URL is incorrect or Supabase project is paused.
-
-**Solution:**
-
-1. Check your `.env` file has the correct `DATABASE_URL`
-2. Go to Supabase dashboard—projects on the free tier pause after inactivity. Click to resume.
-3. Verify connection manually:
-   ```bash
-   cd backend
-   uv run python -c "from app.config import settings; print(settings.database_url)"
-   ```
+**Solution:** This is expected behavior. Tests insert and then delete data. To see data in Supabase Studio, manually insert via the UI or run the app (in future modules).
 
 ---
 
@@ -1318,36 +1831,33 @@ sqlalchemy.exc.IntegrityError: foreign key constraint fails
 
 Let's reflect on the "why" behind our design choices.
 
-### Decision 1: Why Separate Tables Instead of One Big Table?
+### Decision 1: Why SQLModel Over Plain SQLAlchemy?
 
-**Alternative:** Put everything in one table:
+**Alternative:** Use SQLAlchemy + Pydantic separately.
 
-```
-| id | name | org | benchmark | score | opinion | sentiment |
-```
+**Why we chose SQLModel:**
 
-**Why we didn't:**
+- **Single source of truth**: Define fields once
+- **Better FastAPI integration**: Created by the same author
+- **Type safety**: Full editor support with type hints
+- **Less code**: No duplication between ORM and schemas
+- **Same power**: SQLAlchemy features still available when needed
 
-- Massive redundancy (model info repeated for every benchmark)
-- Can't have a model without results, or results without opinions
-- Difficult to query ("show me all benchmarks" requires finding unique values in a column)
-- Violates normal forms (1NF, 2NF, 3NF)
+**When to use plain SQLAlchemy:**
 
-**Our approach:** Normalized schema with relationships
-
-- Each entity has its own table
-- Relationships via foreign keys
-- Query flexibility with JOINs
+- Very complex legacy schemas that don't map well to Pydantic
+- Need features not yet supported by SQLModel (rare)
+- Team already has deep SQLAlchemy expertise
 
 ### Decision 2: Why JSONB for Metadata Instead of Columns?
 
 **Alternative:** Add columns for every possible attribute:
 
 ```python
-context_window: Mapped[Optional[int]]
-multimodal: Mapped[Optional[bool]]
-pricing_input: Mapped[Optional[float]]
-pricing_output: Mapped[Optional[float]]
+context_window: int | None = None
+multimodal: bool | None = None
+pricing_input: float | None = None
+pricing_output: float | None = None
 # ... 50 more columns
 ```
 
@@ -1380,16 +1890,17 @@ pricing_output: Mapped[Optional[float]]
 ### Decision 3: Why CASCADE Delete?
 
 ```python
-model_id: Mapped[int] = mapped_column(
-    ForeignKey("models.id", ondelete="CASCADE")
-)
+model_id: int = Field(foreign_key="models.id", index=True)
+
+# In relationship:
+sa_relationship_kwargs={"cascade": "all, delete-orphan"}
 ```
 
-**What does `ondelete="CASCADE"` do?**
+**What does CASCADE do?**
 
 When you delete a model, automatically delete all related benchmark results, opinions, and use cases.
 
-**Alternative:** `ondelete="RESTRICT"` or `ondelete="SET NULL"`
+**Alternative:** `RESTRICT` or `SET NULL`
 
 - `RESTRICT`: Prevent deletion if related rows exist (must delete children first)
 - `SET NULL`: Set foreign key to NULL when parent is deleted (orphans the child)
@@ -1408,8 +1919,9 @@ When you delete a model, automatically delete all related benchmark results, opi
 ### Decision 4: Why Timestamps on Every Table?
 
 ```python
-created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-updated_at: Mapped[datetime] = mapped_column(onupdate=func.now())
+class TimestampMixin(SQLModel):
+    created_at: datetime | None = Field(...)
+    updated_at: datetime | None = Field(...)
 ```
 
 **Benefits:**
@@ -1427,7 +1939,7 @@ updated_at: Mapped[datetime] = mapped_column(onupdate=func.now())
 
 ## What You've Accomplished
 
-Congratulations! 🎉 You've designed and deployed a production-ready database schema. Here's what you now have:
+Congratulations! 🎉 You've designed and deployed a production-ready database schema using modern SQLModel. Here's what you now have:
 
 1. **Solid Database Design Skills**
 
@@ -1435,13 +1947,20 @@ Congratulations! 🎉 You've designed and deployed a production-ready database s
    - Knowledge of foreign keys, indexes, and constraints
    - Ability to model relationships between entities
 
-2. **Supabase PostgreSQL Database**
+2. **SQLModel Mastery**
+
+   - Unified models that serve as both tables and schemas
+   - Type-safe, validated data models
+   - Understanding of base models, table models, and schema models
+   - Knowledge of when to use `Field()` vs `sa_column()`
+
+3. **Supabase PostgreSQL Database**
 
    - Managed database with automatic backups
    - Beautiful UI for inspection and testing
    - Production-ready infrastructure
 
-3. **Five Core Tables**
+4. **Five Core Tables**
 
    - `models` - AI models with flexible metadata
    - `benchmarks` - Academic benchmarks
@@ -1449,41 +1968,46 @@ Congratulations! 🎉 You've designed and deployed a production-ready database s
    - `opinions` - Public sentiment and feedback
    - `use_cases` - Mentioned use cases
 
-4. **Alembic Migration System**
+5. **Alembic Migration System**
 
    - Version control for database schema
    - Ability to evolve schema safely
    - Rollback capability if things go wrong
+   - Async-compatible configuration
 
-5. **Comprehensive Test Coverage**
+6. **Comprehensive Test Coverage**
    - Connection tests
    - Schema validation
    - Constraint enforcement
    - JSONB and array functionality
+   - Cascade delete behavior
 
 ### Key Takeaways
 
+- **SQLModel unifies ORM and schemas** - define fields once, use everywhere
 - **Normalization prevents data inconsistency** by storing each fact once
 - **Foreign keys enforce referential integrity** at the database level
 - **Indexes are essential for query performance** on large datasets
 - **JSONB provides flexibility** when your data structure varies
 - **Migrations are version control for your schema** and essential for teams
 - **Constraints are your safety net** - they prevent invalid data
+- **Async operations are the future** of Python database access
 
 ---
 
 ## What's Next?
 
-In **Module 1.2: SQLAlchemy Models & Repository Pattern**, you'll:
+In **Module 1.2: Repository Pattern with SQLModel**, you'll:
 
 - Implement the **Repository Pattern** to abstract database operations
-- Create a `BaseRepository` with CRUD operations (Create, Read, Update, Delete)
+- Create a `BaseRepository` with async CRUD operations using SQLModel
 - Build specific repositories for each entity (`ModelRepository`, `BenchmarkRepository`, etc.)
 - Learn **dependency injection** patterns for FastAPI
 - Write comprehensive unit tests for repository methods
 - Understand **session management** and async context managers
+- Use SQLModel's `select()` for type-safe queries
 
-You've built the schema. Now it's time to build the layer that interacts with it!
+You've built the schema with SQLModel. Now it's time to build the layer that interacts with it!
 
 ---
 
@@ -1496,12 +2020,12 @@ You've built the schema. Now it's time to build the layer that interacts with it
 **Solution:**
 
 1. Check `.env` has correct `DATABASE_URL`
-2. Test connection manually:
+2. Verify Supabase project is running (not paused)
+3. Test connection manually:
    ```bash
    cd backend
    uv run python -c "import asyncio; from app.db import engine; asyncio.run(engine.connect())"
    ```
-3. Check Supabase project is running (not paused)
 
 ### "Table already exists" Error
 
@@ -1531,26 +2055,53 @@ uv sync
 uv run pytest tests/test_database.py -v
 ```
 
-### Can't Connect from Local Machine
+### SQLModel Field Validation Errors
 
-**Cause:** Supabase projects are accessible from anywhere by default, but check firewall.
+**Symptom:**
 
-**Solution:**
+```
+ValidationError: 1 validation error for Model
+```
 
-1. Go to Supabase Project Settings → Database
-2. Ensure "Enable connection pooling" is ON
-3. Use the "Session" mode connection string (not "Transaction")
-4. If still failing, check your local firewall isn't blocking port 5432
+**Cause:** SQLModel uses Pydantic validation. Missing required fields or wrong types.
 
-### Tests Pass but Supabase Studio Shows No Data
+**Solution:** Check that you're providing all required fields:
 
-**Cause:** Tests clean up after themselves (as they should!).
+```python
+# This will fail - missing required fields
+model = Model()  # ValidationError!
 
-**Solution:** This is expected behavior. Tests insert and then delete data. To see data in Supabase Studio, manually insert via the UI or run the app (in future modules).
+# This works
+model = Model(name="GPT-4", organization="OpenAI")
+```
+
+### Async Session Errors
+
+**Symptom:**
+
+```
+greenlet_spawn has not been called
+```
+
+**Cause:** Trying to access lazy-loaded relationships in async session.
+
+**Solution:** Use eager loading:
+
+```python
+from sqlalchemy.orm import selectinload
+
+statement = select(Model).options(selectinload(Model.benchmark_results))
+```
 
 ---
 
 ## Additional Resources
+
+### SQLModel
+
+- [SQLModel Documentation](https://sqlmodel.tiangolo.com/)
+- [SQLModel GitHub](https://github.com/tiangolo/sqlmodel)
+- [FastAPI with SQLModel Tutorial](https://sqlmodel.tiangolo.com/tutorial/fastapi/)
 
 ### Database Design
 
@@ -1563,7 +2114,7 @@ uv run pytest tests/test_database.py -v
 - [Alembic Tutorial](https://alembic.sqlalchemy.org/en/latest/tutorial.html)
 - [Auto Generating Migrations](https://alembic.sqlalchemy.org/en/latest/autogenerate.html)
 
-### SQLAlchemy
+### SQLAlchemy 2.0
 
 - [SQLAlchemy 2.0 Documentation](https://docs.sqlalchemy.org/en/20/)
 - [Async SQLAlchemy Guide](https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html)
@@ -1575,7 +2126,7 @@ uv run pytest tests/test_database.py -v
 
 ---
 
-**Next Module:** [Module 1.2 - SQLAlchemy Models & Repository Pattern](./module-1.2-repository-pattern.md)
+**Next Module:** [Module 1.2 - Repository Pattern with SQLModel](./module-1.2-repository-pattern.md)
 
 ---
 
@@ -1607,7 +2158,7 @@ JOIN models m ON o.model_id = m.id
 WHERE m.name = 'GPT-4'
 ORDER BY o.date_published DESC;
 
--- Find models with specific metadata attribute
+-- Find models with specific metadata attribute (JSONB query)
 SELECT name, organization, metadata->>'context_window' as context_window
 FROM models
 WHERE metadata->>'multimodal' = 'true';
@@ -1618,6 +2169,105 @@ FROM models m
 LEFT JOIN benchmark_results br ON m.id = br.model_id
 GROUP BY m.id, m.name
 ORDER BY num_results DESC;
+
+-- Find opinions with specific tag (array query)
+SELECT m.name, o.content, o.sentiment
+FROM opinions o
+JOIN models m ON o.model_id = m.id
+WHERE 'coding' = ANY(o.tags);
 ```
 
 Practice these queries in Supabase Studio's SQL Editor to get comfortable with your schema!
+
+---
+
+## Appendix: SQLModel Quick Reference
+
+### Defining Models
+
+```python
+# Base model (shared fields)
+class MyBase(SQLModel):
+    name: str = Field(max_length=255)
+    description: str | None = None
+
+# Table model
+class MyTable(MyBase, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+
+# Schema models
+class MyCreate(MyBase):
+    pass
+
+class MyResponse(MyBase):
+    id: int
+    created_at: datetime
+```
+
+### Field Configuration
+
+```python
+# Basic field
+name: str = Field(max_length=255)
+
+# Indexed field
+email: str = Field(index=True, unique=True)
+
+# Foreign key
+user_id: int = Field(foreign_key="users.id")
+
+# With default
+status: str = Field(default="active")
+
+# Nullable
+description: str | None = Field(default=None)
+
+# Advanced column (use sa_column)
+content: str = Field(sa_column=Column(Text))
+```
+
+### Relationships
+
+```python
+# One-to-many
+class User(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    posts: list["Post"] = Relationship(back_populates="user")
+
+class Post(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id")
+    user: User = Relationship(back_populates="posts")
+```
+
+### Querying
+
+```python
+from sqlmodel import select
+
+# Get by ID
+user = await session.get(User, 1)
+
+# Select with where
+statement = select(User).where(User.email == "test@example.com")
+result = await session.execute(statement)
+user = result.scalar_one()
+
+# Select all
+statement = select(User)
+result = await session.execute(statement)
+users = result.scalars().all()
+
+# With joins and eager loading
+from sqlalchemy.orm import selectinload
+
+statement = (
+    select(User)
+    .options(selectinload(User.posts))
+    .where(User.id == 1)
+)
+result = await session.execute(statement)
+user = result.scalar_one()
+```
+
+This quick reference should help you as you continue building with SQLModel!

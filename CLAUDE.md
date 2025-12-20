@@ -12,7 +12,7 @@
 
 - **Python 3.13+** with **FastAPI** (async web framework)
 - **Supabase** (managed PostgreSQL) with JSONB for flexible metadata storage
-- **SQLAlchemy** ORM with **Alembic** migrations
+- **SQLModel** (combines SQLAlchemy and Pydantic) with **Alembic** migrations
 - **uv** for dependency management
 - **pytest** for testing
 - **Anthropic SDK** (Claude API) for LLM-powered data extraction
@@ -45,8 +45,8 @@ model-catalogue/
 │   ├── app/
 │   │   ├── main.py                 # FastAPI application entry
 │   │   ├── config.py               # Settings management
-│   │   ├── models/                 # SQLAlchemy models
-│   │   ├── schemas/                # Pydantic schemas
+│   │   ├── models/                 # SQLModel models (table & schema)
+│   │   ├── schemas/                # Additional Pydantic schemas if needed
 │   │   ├── api/                    # API route handlers
 │   │   ├── services/               # Business logic layer
 │   │   └── db/                     # Database utilities & repositories
@@ -76,13 +76,14 @@ model-catalogue/
 
 **Service Layer:** Business logic lives in service classes (e.g., `LLMService`, `ExtractionService`) that orchestrate repositories and external APIs. Services are injected into API endpoints via FastAPI's dependency injection.
 
-**Schema Separation:** Each entity has three Pydantic schemas:
+**Unified Models with SQLModel:** SQLModel combines database models and Pydantic schemas into a single source of truth, reducing duplication:
 
-- `*Create` - for POST requests (input validation)
-- `*Update` - for PUT/PATCH requests
-- `*Response` - for API responses (with ORM compatibility)
+- Base `SQLModel` class defines shared fields
+- Table models (with `table=True`) represent database tables
+- Schema models inherit from base for API requests/responses (`*Create`, `*Update`, `*Response`)
+- Eliminates the need for separate ORM and Pydantic model definitions
 
-**Async-First:** Use async/await throughout for I/O operations (database queries, LLM API calls, RSS fetching).
+**Async-First:** Use async/await throughout for I/O operations (database queries, LLM API calls, RSS fetching). SQLModel uses SQLAlchemy's `AsyncSession` for async database operations.
 
 ## Data Model
 
@@ -307,8 +308,8 @@ git push origin feat/model-repository
 
 ## Security Considerations
 
-- **Input Validation:** All user input validated via Pydantic schemas
-- **SQL Injection Prevention:** Use SQLAlchemy ORM, never raw SQL with user input
+- **Input Validation:** All user input validated via SQLModel/Pydantic schemas
+- **SQL Injection Prevention:** Use SQLModel ORM (built on SQLAlchemy), never raw SQL with user input
 - **Secrets Management:** Environment variables only, never hardcoded
 - **CORS:** Configure allowed origins explicitly
 - **Rate Limiting:** Consider for public API endpoints (future enhancement)
@@ -316,8 +317,8 @@ git push origin feat/model-repository
 ## Performance Optimization
 
 - **Database Indexing:** Add indexes on frequently queried fields (model.name, benchmark_results.model_id, opinions.model_id)
-- **Query Optimization:** Use SQLAlchemy's eager loading (`joinedload`, `selectinload`) to avoid N+1 queries
-- **Async Operations:** All I/O operations should be async (database, LLM API, RSS fetching)
+- **Query Optimization:** Use SQLAlchemy's eager loading (`joinedload`, `selectinload`) to avoid N+1 queries (SQLModel uses SQLAlchemy underneath)
+- **Async Operations:** All I/O operations should be async (database with `AsyncSession`, LLM API, RSS fetching)
 - **Response Caching:** Consider caching for read-heavy endpoints (future enhancement)
 
 ## Implementation Phases
@@ -325,8 +326,8 @@ git push origin feat/model-repository
 The project follows a 6-phase implementation plan (see `/conversations/initial-plan.md`):
 
 1. **Phase 0:** Project setup and structure
-2. **Phase 1:** Database layer with SQLAlchemy models and repositories (using Supabase)
-3. **Phase 2:** FastAPI endpoints and Pydantic schemas
+2. **Phase 1:** Database layer with SQLModel models and repositories (using Supabase)
+3. **Phase 2:** FastAPI endpoints with SQLModel schemas
 4. **Phase 3:** Manual LLM input processing
 5. **Phase 4:** Automated RSS newsletter ingestion
 6. **Phase 5:** React frontend
@@ -334,13 +335,14 @@ The project follows a 6-phase implementation plan (see `/conversations/initial-p
 
 When implementing, follow the modular approach: complete one phase before moving to the next, with tests at each stage.
 
-**Note on Phase 1:** Instead of setting up a local PostgreSQL container, you'll create a Supabase project and connect to it. The SQLAlchemy models and repository patterns remain identical.
+**Note on Phase 1:** Instead of setting up a local PostgreSQL container, you'll create a Supabase project and connect to it. SQLModel combines database models and Pydantic schemas into unified definitions, reducing code duplication while teaching the same ORM patterns (it's built on SQLAlchemy).
 
 ## References
 
 - Project planning: `/conversations/summary.md`
 - Detailed implementation plan: `/conversations/initial-plan.md`
 - FastAPI docs: https://fastapi.tiangolo.com/
-- SQLAlchemy 2.0 docs: https://docs.sqlalchemy.org/
+- SQLModel docs: https://sqlmodel.tiangolo.com/
+- SQLAlchemy 2.0 docs: https://docs.sqlalchemy.org/ (SQLModel is built on this)
 - shadcn/ui: https://ui.shadcn.com/
 - Anthropic API docs: https://docs.anthropic.com/

@@ -22,7 +22,7 @@ This is a learning project designed to teach full-stack software engineering bes
 ### Backend
 
 - **Python 3.13+** with **FastAPI** (async web framework)
-- **Supabase** (managed PostgreSQL) with SQLAlchemy ORM
+- **Supabase** (managed PostgreSQL) with **SQLModel** (unified SQLAlchemy + Pydantic)
 - **Anthropic Claude API** for LLM-powered data extraction
 - **APScheduler** for automated RSS processing
 - **pytest** for testing

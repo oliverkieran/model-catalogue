@@ -117,7 +117,7 @@ Now let's add our initial dependencies:
 
 ```bash
 # Core dependencies
-uv add fastapi uvicorn[standard] sqlalchemy alembic psycopg2-binary pydantic-settings python-dotenv
+uv add fastapi uvicorn[standard] sqlmodel alembic asyncpg  greenlet pydantic-settings python-dotenv
 
 # LLM and data processing
 uv add anthropic feedparser apscheduler
@@ -132,8 +132,10 @@ cd ..
 **Why these dependencies?**
 
 - **fastapi + uvicorn**: Web framework and ASGI server
-- **sqlalchemy + alembic**: Database ORM and migrations
-- **psycopg2-binary**: PostgreSQL adapter
+- **sqlmodel**: Combines SQLAlchemy ORM with Pydantic for unified models
+- **alembic**: Database migrations
+- **asyncpg**: Async PostgreSQL adapter (required for async SQLModel)
+- **greenlet**: Required by SQLAlchemy for async support
 - **pydantic-settings**: Environment configuration management
 - **anthropic**: Claude API client
 - **feedparser**: RSS parsing

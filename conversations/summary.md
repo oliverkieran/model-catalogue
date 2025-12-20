@@ -78,12 +78,12 @@
 - **Language:** Python 3.13+
 - **Framework:** FastAPI (async-capable, auto API docs)
 - **Database:** Supabase (managed PostgreSQL) with JSONB for flexible fields
-- **ORM:** SQLAlchemy with Alembic migrations
+- **ORM:** SQLModel (combines SQLAlchemy and Pydantic) with Alembic migrations
 - **Dependency Management:** uv
 - **RSS Parsing:** feedparser
 - **Scheduling:** APScheduler (for daily newsletter checks)
 - **LLM Integration:** Anthropic SDK (Claude API)
-- **Validation:** Pydantic
+- **Validation:** SQLModel/Pydantic
 - **Testing:** pytest
 
 ### Frontend
@@ -168,11 +168,11 @@
 **Phase 1: Database Layer** (4 hours)
 
 - Module 1.1: Database design, Supabase setup, Alembic
-- Module 1.2: SQLAlchemy models, repository pattern
+- Module 1.2: SQLModel models (unified table + schema), repository pattern
 
 **Phase 2: API Layer** (5 hours)
 
-- Module 2.1: Pydantic schemas, FastAPI foundation
+- Module 2.1: SQLModel schemas (unified models), FastAPI foundation
 - Module 2.2: CRUD endpoints, error handling
 
 **Phase 3: Manual LLM Input** (4 hours)
@@ -201,8 +201,6 @@
 
 - **Part-time (5-10 hrs/week):** 5-7 weeks
 - **Full-time:** 2 weeks
-
-**Note:** Using Supabase saves ~2-3 hours compared to self-hosted PostgreSQL setup.
 
 ---
 
