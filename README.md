@@ -112,8 +112,8 @@ uv run pytest -m "not slow"
 This project is built following a structured learning path:
 
 - **Module 0**: Project Setup (✅ Complete)
-- **Module 1.1**: Database Design & Setup
-- **Module 1.2**: SQLAlchemy Models & Repository Pattern
+- **Module 1.1**: Database Design & Setup (✅ Complete)
+- **Module 1.2**: SQLAlchemy Models & Repository Pattern (✅ Complete)
 - **Module 2.1**: Pydantic Schemas & API Foundation
 - **Module 2.2**: CRUD Endpoints & Error Handling
 - **Module 3.1**: LLM Service Layer

@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlmodel.ext.asyncio.session import AsyncSession
 from app.main import app
 from app.config import settings
-from app.models.models import Model
+from app.models.models import Model, Benchmark
 from datetime import date
 
 
@@ -22,16 +22,50 @@ def client():
 
 
 @pytest.fixture
-def sample_model():
+def sample_models():
     """
-    Sample model for testing
+    List of three Sample AI models for testing
     """
-    return Model(
-        name="gpt-test",
-        display_name="GPT Test Model",
-        organization="Test Org",
+
+    model1 = Model(
+        name=f"gpt-model-1",
+        display_name=f"GPT Model 1",
+        organization="OpenAI-Test",
         release_date=date(2025, 1, 1),
-        description="Large Language Model for testing purposes",
+        description=f"Test Model Nr. 1",
+        license="Apache 2.0",
+        metadata={"context_window": 64000, "pricing": "free"},
+    )
+    model2 = Model(
+        name=f"claude-model-2",
+        display_name=f"Model 2",
+        organization="Anthropic-Test",
+        release_date=date(2024, 6, 1),
+        description=f"Test Model Nr. 2",
+        license="Proprietary",
+        metadata={"input_modalities": ["text", "images"], "pricing": "free"},
+    )
+    model3 = Model(
+        name=f"gpt-model-3",
+        display_name=f"GPT Model 3",
+        organization="OpenAI-Test",
+        release_date=date(2025, 6, 1),
+        description=f"Test Model Nr. 3",
+        license="Proprietary",
+        metadata={"context_window": 128000, "pricing": "expensive"},
+    )
+
+    return [model1, model2, model3]
+
+
+@pytest.fixture
+def sample_benchmark():
+    """Sample benchmark for testing"""
+    return Benchmark(
+        name="TEST_BENCH",
+        category="Reasoning",
+        description="A benchmark for testing AI models",
+        url="https://example.com/test-bench",
     )
 
 

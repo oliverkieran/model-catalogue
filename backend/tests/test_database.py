@@ -51,8 +51,9 @@ async def test_models_table_columns(test_engine):
         assert set(column_names) == model_fields
 
 
-async def test_can_create_model(test_session, sample_model):
+async def test_can_create_model(test_session, sample_models):
     """Test that we can insert and query a model using SQLModel"""
+    sample_model = sample_models[0]
     test_session.add(sample_model)
     await test_session.commit()  # OK: commits the SAVEPOINT, not the outer transaction
     await test_session.refresh(sample_model)
@@ -65,15 +66,16 @@ async def test_can_create_model(test_session, sample_model):
     stmt = select(Model).where(Model.id == sample_model.id)
     row = (await test_session.exec(stmt)).first()
 
-    assert row.name == "gpt-test"
-    assert row.display_name == "GPT Test Model"
-    assert row.organization == "Test Org"
+    assert row.name == sample_model.name
+    assert row.display_name == sample_model.display_name
+    assert row.organization == sample_model.organization
 
 
-async def test_foreign_key_constraints(test_session, sample_model):
+async def test_foreign_key_constraints(test_session, sample_models):
     """Test that foreign key relationships work correctly"""
 
     # Add the sample model first
+    sample_model = sample_models[0]
     test_session.add(sample_model)
     await test_session.commit()
     await test_session.refresh(sample_model)
@@ -98,11 +100,12 @@ async def test_foreign_key_constraints(test_session, sample_model):
     assert sample_model.opinions[0].id == test_opinion.id
 
 
-async def test_unique_constraint(test_session, sample_model):
+async def test_unique_constraint(test_session, sample_models):
     """Test that the unique constraint on model name is enforced"""
     from sqlalchemy.exc import IntegrityError
 
     # Add the sample model first
+    sample_model = sample_models[0]
     test_session.add(sample_model)
     await test_session.commit()
 
@@ -119,10 +122,9 @@ async def test_unique_constraint(test_session, sample_model):
     assert "unique constraint" in str(exc_info.value).lower()
 
 
-async def test_jsonb_column(test_session, sample_model):
+async def test_jsonb_column(test_session, sample_models):
     """Test that JSONB columns work correctly"""
-    from sqlalchemy.dialects.postgresql import JSONB
-
+    sample_model = sample_models[0]
     metadata = {
         "pricing": "free",
         "context_window": 2048,
@@ -139,9 +141,9 @@ async def test_jsonb_column(test_session, sample_model):
     assert sample_model.metadata_ == metadata
 
 
-async def test_cascade_delete(test_session, sample_model):
+async def test_cascade_delete(test_session, sample_models):
     """Test that cascade delete works for related opinions"""
-    # Add the sample model first
+    sample_model = sample_models[0]
     test_session.add(sample_model)
     await test_session.commit()
     await test_session.refresh(sample_model)
