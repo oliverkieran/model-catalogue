@@ -16,7 +16,7 @@ Here's the exciting part: you already have 80% of what you need! Your repository
 - **Updating resources** (PUT/PATCH requests)
 - **Deleting resources** (DELETE requests)
 - **Validating input** (preventing duplicates, checking references)
-- **Handling errors gracefully** (custom exception handlers)
+- **Handling errors gracefully** (clear HTTP responses)
 - **Managing related resources** (nested endpoints like `/models/{id}/benchmarks`)
 - **Searching and filtering** (query-based operations)
 
@@ -83,18 +83,18 @@ async def create_model(
 - ✅ **Proper status codes**: Returns 201 Created, 409 Conflict, 500 Error
 - ✅ **Clear error messages**: Tells users exactly what went wrong
 - ✅ **Comprehensive validation**: Uses Pydantic schemas for input validation
-- ✅ **Graceful error handling**: Catches exceptions and returns structured errors
+- ✅ **Graceful error handling**: Catches exceptions and returns clear errors
 - ✅ **Transaction safety**: Repository pattern ensures atomic operations
 
 In this module, you'll learn:
 
 - **Implementing POST, PUT, DELETE** operations following REST conventions
-- **Comprehensive error handling** with custom exception handlers
+- **Comprehensive error handling** with clear HTTP responses
 - **Input validation patterns** (duplicate checking, reference validation)
 - **Related resource endpoints** (getting a model's benchmarks)
 - **Search functionality** using repository search methods
 - **Transaction management** for multi-step operations
-- **Testing CRUD operations** with both unit and integration tests
+- **Testing CRUD operations** with focused unit tests
 
 By the end, you'll have a **complete, production-ready API** that handles real-world scenarios gracefully.
 
@@ -107,11 +107,11 @@ By the end of this module, you'll have:
 - ✅ Complete CRUD operations for Models (POST, PUT, DELETE)
 - ✅ Complete CRUD operations for Benchmarks
 - ✅ BenchmarkResults creation and management
-- ✅ Custom exception handlers for consistent error responses
+- ✅ Clear, consistent error responses for CRUD operations
 - ✅ Duplicate checking and validation logic
 - ✅ Related resource endpoints (`/models/{id}/benchmarks`)
 - ✅ Search endpoints with query-based filtering
-- ✅ Comprehensive tests for all CRUD operations
+- ✅ Focused unit tests for Models CRUD
 - ✅ Transaction management for complex operations
 - ✅ Professional error messages and status codes
 
@@ -225,7 +225,7 @@ Update `backend/app/api/v1/models.py` to add the create endpoint:
 
 ```python
 # Add to existing imports
-from app.models.models import ModelCreate, ModelResponse
+from app.models.models import Model, ModelCreate, ModelResponse
 
 # Add after the existing endpoints
 
@@ -869,8 +869,8 @@ Update `backend/app/api/v1/benchmarks.py`:
 
 ```python
 # Add to imports
-from app.models.models import BenchmarkCreate, BenchmarkUpdate
-from app.db.repository import BenchmarkRepository
+from app.models.models import Benchmark, BenchmarkCreate, BenchmarkUpdate, BenchmarkResponse
+from app.db.repositories import BenchmarkRepository
 
 # Add after the existing endpoints
 
@@ -1038,8 +1038,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel.ext.asyncio.session import AsyncSession
 from typing import Sequence
 
-from app.db.session import get_db
-from app.db.repository import BenchmarkResultRepository, ModelRepository, BenchmarkRepository
+from app.db import get_db
+from app.db.repositories import BenchmarkResultRepository, ModelRepository, BenchmarkRepository
 from app.models.models import (
     BenchmarkResult,
     BenchmarkResultCreate,
@@ -1075,8 +1075,6 @@ async def list_benchmark_results(
         results = await repo.get_by_model_and_benchmark(
             model_id=model_id,
             benchmark_id=benchmark_id,
-            skip=skip,
-            limit=limit
         )
     elif model_id:
         # Get all results for a model
@@ -1143,12 +1141,12 @@ async def create_benchmark_result(
     # Check for duplicate (same model+benchmark+date)
     result_repo = BenchmarkResultRepository(session)
     if result_data.date_tested:
-        existing = await result_repo.get_by_model_benchmark_date(
+        exists = await result_repo.result_exists(
             model_id=result_data.model_id,
             benchmark_id=result_data.benchmark_id,
-            date_tested=result_data.date_tested
+            date_tested=result_data.date_tested,
         )
-        if existing:
+        if exists:
             raise HTTPException(
                 status_code=409,
                 detail=(
@@ -1256,12 +1254,12 @@ if not benchmark:
 ### 2. Composite Duplicate Checking
 
 ```python
-existing = await result_repo.get_by_model_benchmark_date(
+exists = await result_repo.result_exists(
     model_id=result_data.model_id,
     benchmark_id=result_data.benchmark_id,
     date_tested=result_data.date_tested
 )
-if existing:
+if exists:
     raise HTTPException(status_code=409, detail="Result already exists")
 ```
 
@@ -1301,6 +1299,14 @@ GET /api/v1/benchmark-results/?model_id=1&benchmark_id=5
 ```
 
 ### Include the Router
+
+Update `backend/app/api/v1/__init__.py`:
+
+```python
+from . import models, benchmarks, benchmark_results
+
+__all__ = ["models", "benchmarks", "benchmark_results"]
+```
 
 Update `backend/app/main.py`:
 
@@ -1359,7 +1365,7 @@ async def get_model_benchmarks(
         )
 
     # Get benchmark results for this model
-    from app.db.repository import BenchmarkResultRepository
+    from app.db.repositories import BenchmarkResultRepository
     result_repo = BenchmarkResultRepository(session)
     results = await result_repo.get_by_model_id(model_id, skip=skip, limit=limit)
 
@@ -1381,7 +1387,7 @@ GET /api/v1/models/5/benchmarks        # "This model's benchmarks"
 GET /api/v1/models/5/opinions          # "This model's opinions"
 
 # Flat with filters (when filtering across multiple dimensions)
-GET /api/v1/benchmark-results/?model_id=5&benchmark_id=3&date_tested=2024-01-01
+GET /api/v1/benchmark-results/?model_id=5&benchmark_id=3
 ```
 
 ### Add More Related Endpoints
@@ -1413,7 +1419,7 @@ async def get_benchmark_results(
         )
 
     # Get results for this benchmark
-    from app.db.repository import BenchmarkResultRepository
+    from app.db.repositories import BenchmarkResultRepository
     result_repo = BenchmarkResultRepository(session)
     results = await result_repo.get_by_benchmark_id(benchmark_id, skip=skip, limit=limit)
 
@@ -1451,10 +1457,10 @@ async def search_models(
     session: AsyncSession = Depends(get_db),
 ) -> Sequence[ModelResponse]:
     """
-    Search for models by name, organization, or description.
+    Search for models by name or organization.
 
     The search is case-insensitive and matches partial strings.
-    Searches across name, display_name, organization, and description fields.
+    Searches across name and organization fields.
 
     Args:
         q: Search query (minimum 2 characters)
@@ -1543,292 +1549,12 @@ curl "http://localhost:8000/api/v1/models/search/?q=a"
 
 ---
 
-## Step 8: Implementing Custom Exception Handlers
+## Step 8: Writing Minimal CRUD Tests (Models Only)
 
-Right now, errors return FastAPI's default format. Let's customize error responses for consistency.
+We're keeping tests focused and lightweight so you can move quickly. We'll test
+only the Models resource and cover the core create/update/delete flows.
 
-### Why Custom Exception Handlers?
-
-**Default error format:**
-
-```json
-{
-  "detail": "Model with id 5 not found"
-}
-```
-
-**Enhanced error format:**
-
-```json
-{
-  "error": {
-    "code": "MODEL_NOT_FOUND",
-    "message": "Model with id 5 not found",
-    "status": 404,
-    "timestamp": "2025-01-15T10:30:00Z"
-  }
-}
-```
-
-**Benefits:**
-
-- **Structured errors**: Consistent format for all errors
-- **Error codes**: Machine-readable identifiers for error types
-- **Timestamps**: Helps with debugging and logging
-- **Additional context**: Can include request_id, path, etc.
-
-### Create Custom Exception Classes
-
-Create `backend/app/api/exceptions.py`:
-
-```python
-"""
-Custom exception classes and handlers for the API.
-
-Provides structured error responses with consistent formatting
-and proper HTTP status codes.
-"""
-
-from fastapi import Request, status
-from fastapi.responses import JSONResponse
-from datetime import datetime
-
-
-class APIException(Exception):
-    """
-    Base exception class for all API errors.
-
-    Attributes:
-        message: Human-readable error message
-        code: Machine-readable error code
-        status_code: HTTP status code
-    """
-    def __init__(
-        self,
-        message: str,
-        code: str = "API_ERROR",
-        status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR,
-    ):
-        self.message = message
-        self.code = code
-        self.status_code = status_code
-        super().__init__(self.message)
-
-
-class ResourceNotFoundError(APIException):
-    """Raised when a requested resource doesn't exist."""
-    def __init__(self, resource: str, identifier: int | str):
-        super().__init__(
-            message=f"{resource} with identifier '{identifier}' not found",
-            code=f"{resource.upper()}_NOT_FOUND",
-            status_code=status.HTTP_404_NOT_FOUND,
-        )
-
-
-class DuplicateResourceError(APIException):
-    """Raised when attempting to create a duplicate resource."""
-    def __init__(self, resource: str, field: str, value: str):
-        super().__init__(
-            message=f"{resource} with {field} '{value}' already exists",
-            code=f"DUPLICATE_{resource.upper()}",
-            status_code=status.HTTP_409_CONFLICT,
-        )
-
-
-class ValidationError(APIException):
-    """Raised when input validation fails."""
-    def __init__(self, message: str, field: str | None = None):
-        code = "VALIDATION_ERROR"
-        if field:
-            message = f"Validation failed for field '{field}': {message}"
-
-        super().__init__(
-            message=message,
-            code=code,
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        )
-
-
-class DatabaseError(APIException):
-    """Raised when a database operation fails."""
-    def __init__(self, operation: str, details: str | None = None):
-        message = f"Database {operation} operation failed"
-        if details:
-            message += f": {details}"
-
-        super().__init__(
-            message=message,
-            code="DATABASE_ERROR",
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        )
-
-
-async def api_exception_handler(request: Request, exc: APIException) -> JSONResponse:
-    """
-    Handler for custom API exceptions.
-
-    Returns structured error response with:
-    - Error code
-    - Message
-    - Status code
-    - Timestamp
-    - Request path
-    """
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={
-            "error": {
-                "code": exc.code,
-                "message": exc.message,
-                "status": exc.status_code,
-                "timestamp": datetime.utcnow().isoformat() + "Z",
-                "path": str(request.url.path),
-            }
-        },
-    )
-
-
-async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    """
-    Handler for unexpected exceptions.
-
-    Returns generic error response without exposing internal details.
-    """
-    # In production, log the actual exception for debugging
-    # In development, you might want to include more details
-
-    return JSONResponse(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={
-            "error": {
-                "code": "INTERNAL_SERVER_ERROR",
-                "message": "An unexpected error occurred. Please try again later.",
-                "status": 500,
-                "timestamp": datetime.utcnow().isoformat() + "Z",
-                "path": str(request.url.path),
-            }
-        },
-    )
-```
-
-### Register Exception Handlers
-
-Update `backend/app/main.py`:
-
-```python
-from app.api.exceptions import (
-    APIException,
-    api_exception_handler,
-    generic_exception_handler,
-)
-
-# After creating the app instance
-app = FastAPI(...)
-
-# Register custom exception handlers
-app.add_exception_handler(APIException, api_exception_handler)
-app.add_exception_handler(Exception, generic_exception_handler)
-
-# Rest of the configuration...
-```
-
-### Update Endpoints to Use Custom Exceptions
-
-Update `backend/app/api/v1/models.py`:
-
-```python
-from app.api.exceptions import ResourceNotFoundError, DuplicateResourceError, DatabaseError
-
-# Update create endpoint
-@router.post("/", response_model=ModelResponse, status_code=201)
-async def create_model(
-    model_data: ModelCreate,
-    session: AsyncSession = Depends(get_db),
-) -> ModelResponse:
-    """Create a new AI model."""
-    repo = ModelRepository(session)
-
-    # Check for duplicate name
-    existing = await repo.get_by_name(model_data.name)
-    if existing:
-        raise DuplicateResourceError(
-            resource="Model",
-            field="name",
-            value=model_data.name
-        )
-
-    # Create the model
-    try:
-        new_model = Model(**model_data.model_dump())
-        created = await repo.create(new_model)
-        return created
-    except Exception as e:
-        raise DatabaseError(operation="create", details=str(e))
-
-
-# Update get endpoint
-@router.get("/{model_id}", response_model=ModelResponse)
-async def get_model(
-    model_id: int,
-    session: AsyncSession = Depends(get_db),
-) -> ModelResponse:
-    """Get a specific AI model by ID."""
-    repo = ModelRepository(session)
-    model = await repo.get_by_id(model_id)
-
-    if not model:
-        raise ResourceNotFoundError(resource="Model", identifier=model_id)
-
-    return model
-
-
-# Update delete endpoint
-@router.delete("/{model_id}", status_code=204)
-async def delete_model(
-    model_id: int,
-    session: AsyncSession = Depends(get_db),
-):
-    """Delete an AI model by ID."""
-    repo = ModelRepository(session)
-
-    existing = await repo.get_by_id(model_id)
-    if not existing:
-        raise ResourceNotFoundError(resource="Model", identifier=model_id)
-
-    try:
-        await repo.delete(model_id)
-        return None
-    except Exception as e:
-        raise DatabaseError(operation="delete", details=str(e))
-```
-
-**Now errors look like:**
-
-```bash
-curl http://localhost:8000/api/v1/models/9999
-```
-
-```json
-{
-  "error": {
-    "code": "MODEL_NOT_FOUND",
-    "message": "Model with identifier '9999' not found",
-    "status": 404,
-    "timestamp": "2025-01-15T10:30:00Z",
-    "path": "/api/v1/models/9999"
-  }
-}
-```
-
-**🎯 Checkpoint:** Your API has structured, consistent error responses!
-
----
-
-## Step 9: Writing CRUD Tests
-
-Let's write comprehensive tests for all CRUD operations.
-
-### Create CRUD Test File
+### Create a Small CRUD Test File
 
 Create `backend/tests/api/test_models_crud.py`:
 
@@ -1836,16 +1562,13 @@ Create `backend/tests/api/test_models_crud.py`:
 """
 Tests for Models CRUD operations
 
-Covers create, update, and delete operations with both unit tests
-(mocked repositories) and integration tests (real database).
+Keeps a small set of unit tests for core CRUD behavior.
 """
 
 import pytest
 from fastapi.testclient import TestClient
-from httpx import AsyncClient
 from unittest.mock import AsyncMock, patch
 from datetime import date
-from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
 from app.models.models import Model
 
@@ -1891,35 +1614,6 @@ class TestModelsCRUDUnit:
         mock_repo_instance.create.assert_awaited_once()
 
     @patch("app.api.v1.models.ModelRepository")
-    def test_create_model_duplicate(self, MockRepo: AsyncMock, client: TestClient):
-        """Test creating a model with duplicate name returns 409"""
-        # Setup mock to return existing model
-        mock_repo_instance = AsyncMock()
-        existing_model = Model(
-            id=5,
-            name="existing-model",
-            display_name="Existing",
-            organization="Test"
-        )
-        mock_repo_instance.get_by_name.return_value = existing_model
-        MockRepo.return_value = mock_repo_instance
-
-        # Make request
-        response = client.post(
-            "/api/v1/models/",
-            json={
-                "name": "existing-model",
-                "display_name": "Test",
-                "organization": "Test"
-            }
-        )
-
-        # Assertions
-        assert response.status_code == 409
-        data = response.json()
-        assert "already exists" in data["detail"].lower()
-
-    @patch("app.api.v1.models.ModelRepository")
     def test_update_model_success(self, MockRepo: AsyncMock, client: TestClient):
         """Test updating a model successfully"""
         # Setup mock
@@ -1956,25 +1650,6 @@ class TestModelsCRUDUnit:
         mock_repo_instance.update.assert_awaited_once()
 
     @patch("app.api.v1.models.ModelRepository")
-    def test_update_model_not_found(self, MockRepo: AsyncMock, client: TestClient):
-        """Test updating non-existent model returns 404"""
-        # Setup mock to return None
-        mock_repo_instance = AsyncMock()
-        mock_repo_instance.get_by_id.return_value = None
-        MockRepo.return_value = mock_repo_instance
-
-        # Make request
-        response = client.patch(
-            "/api/v1/models/9999",
-            json={"display_name": "Test"}
-        )
-
-        # Assertions
-        assert response.status_code == 404
-        data = response.json()
-        assert "not found" in data["detail"].lower()
-
-    @patch("app.api.v1.models.ModelRepository")
     def test_delete_model_success(self, MockRepo: AsyncMock, client: TestClient):
         """Test deleting a model successfully"""
         # Setup mock
@@ -1993,134 +1668,6 @@ class TestModelsCRUDUnit:
         mock_repo_instance.get_by_id.assert_awaited_once_with(1)
         mock_repo_instance.delete.assert_awaited_once_with(1)
 
-    @patch("app.api.v1.models.ModelRepository")
-    def test_delete_model_not_found(self, MockRepo: AsyncMock, client: TestClient):
-        """Test deleting non-existent model returns 404"""
-        # Setup mock to return None
-        mock_repo_instance = AsyncMock()
-        mock_repo_instance.get_by_id.return_value = None
-        MockRepo.return_value = mock_repo_instance
-
-        # Make request
-        response = client.delete("/api/v1/models/9999")
-
-        # Assertions
-        assert response.status_code == 404
-        data = response.json()
-        assert "not found" in data["detail"].lower()
-
-
-@pytest.mark.integration
-class TestModelsCRUDIntegration:
-    """Integration tests for Models CRUD with real database"""
-
-    async def test_create_model_integration(
-        self,
-        client_with_db: AsyncClient,
-    ):
-        """Test creating a model with real database"""
-        # Make request
-        response = await client_with_db.post(
-            "/api/v1/models/",
-            json={
-                "name": "integration-test-model",
-                "display_name": "Integration Test",
-                "organization": "Test Org",
-                "release_date": "2024-01-15",
-                "description": "A model created in integration test"
-            }
-        )
-
-        # Assertions
-        assert response.status_code == 201
-        data = response.json()
-        assert data["name"] == "integration-test-model"
-        assert data["id"] is not None
-        assert "created_at" in data
-
-    async def test_create_duplicate_model_integration(
-        self,
-        client_with_db: AsyncClient,
-    ):
-        """Test that creating duplicate model fails"""
-        # Create first model
-        await client_with_db.post(
-            "/api/v1/models/",
-            json={
-                "name": "duplicate-test",
-                "display_name": "Duplicate",
-                "organization": "Test"
-            }
-        )
-
-        # Try to create duplicate
-        response = await client_with_db.post(
-            "/api/v1/models/",
-            json={
-                "name": "duplicate-test",
-                "display_name": "Different Display",
-                "organization": "Test"
-            }
-        )
-
-        # Should fail with 409
-        assert response.status_code == 409
-
-    async def test_update_model_integration(
-        self,
-        client_with_db: AsyncClient,
-    ):
-        """Test updating a model with real database"""
-        # Create a model first
-        create_response = await client_with_db.post(
-            "/api/v1/models/",
-            json={
-                "name": "update-test",
-                "display_name": "Original",
-                "organization": "Test"
-            }
-        )
-        model_id = create_response.json()["id"]
-
-        # Update the model
-        response = await client_with_db.patch(
-            f"/api/v1/models/{model_id}",
-            json={
-                "display_name": "Updated Display",
-                "description": "New description"
-            }
-        )
-
-        # Assertions
-        assert response.status_code == 200
-        data = response.json()
-        assert data["display_name"] == "Updated Display"
-        assert data["description"] == "New description"
-        assert data["name"] == "update-test"  # Unchanged
-
-    async def test_delete_model_integration(
-        self,
-        client_with_db: AsyncClient,
-    ):
-        """Test deleting a model with real database"""
-        # Create a model first
-        create_response = await client_with_db.post(
-            "/api/v1/models/",
-            json={
-                "name": "delete-test",
-                "display_name": "To Delete",
-                "organization": "Test"
-            }
-        )
-        model_id = create_response.json()["id"]
-
-        # Delete the model
-        response = await client_with_db.delete(f"/api/v1/models/{model_id}")
-        assert response.status_code == 204
-
-        # Verify it's gone
-        get_response = await client_with_db.get(f"/api/v1/models/{model_id}")
-        assert get_response.status_code == 404
 ```
 
 ### Run CRUD Tests
@@ -2133,12 +1680,16 @@ uv run pytest tests/api/test_models_crud.py -v
 
 # Run only unit tests
 uv run pytest tests/api/test_models_crud.py -m unit -v
-
-# Run only integration tests
-uv run pytest tests/api/test_models_crud.py -m integration -v
 ```
 
-**🎯 Checkpoint:** You have comprehensive tests for all CRUD operations!
+**🎯 Checkpoint:** You have lightweight CRUD tests for the Models resource!
+
+---
+
+## Next Module Preview: Custom Exception Handlers
+
+We'll cover structured error responses and reusable exception classes in a later
+module once you're comfortable with CRUD flows.
 
 ---
 
@@ -2251,10 +1802,9 @@ Congratulations! You've built a **production-quality CRUD API**. Here's what you
 
 ### 2. Professional Error Handling
 
-- ✅ **Custom exception classes** for different error types
-- ✅ **Structured error responses** with codes and timestamps
 - ✅ **Proper HTTP status codes** for all scenarios
 - ✅ **User-friendly messages** that guide clients
+- ✅ **Consistent error responses** across CRUD endpoints
 
 ### 3. Input Validation
 
@@ -2269,12 +1819,11 @@ Congratulations! You've built a **production-quality CRUD API**. Here's what you
 - ✅ **Filtered queries** (`?model_id=5`)
 - ✅ **Eager loading** for relationships
 
-### 5. Comprehensive Testing
+### 5. Focused Testing
 
 - ✅ **Unit tests** with mocked repositories (fast)
-- ✅ **Integration tests** with real database (thorough)
-- ✅ **CRUD test coverage** for all operations
-- ✅ **Error scenario testing** (duplicates, not found, etc.)
+- ✅ **CRUD test coverage** for Models (core resource)
+- ✅ **Happy-path testing** for create/update/delete
 
 ### 6. REST Best Practices
 
@@ -2296,10 +1845,10 @@ Congratulations! You've built a **production-quality CRUD API**. Here's what you
 
 **On Error Handling:**
 
-- **Custom exceptions make errors consistent** - same format across all endpoints
 - **Status codes communicate outcomes** - 404 not found, 409 conflict, 422 validation
 - **User-friendly messages guide users** - tell them what went wrong and how to fix it
-- **Never expose raw errors to clients** - log details server-side, return generic messages
+- **Keep error formats consistent** - make API usage predictable
+- **Don’t expose raw errors to clients** - log details server-side, return generic messages
 
 **On Validation:**
 
@@ -2311,9 +1860,8 @@ Congratulations! You've built a **production-quality CRUD API**. Here's what you
 **On Testing:**
 
 - **Unit tests are fast** - mock repositories for HTTP layer testing
-- **Integration tests are thorough** - verify full stack with real database
-- **Test error scenarios** - duplicates, not found, invalid references
-- **Both testing strategies complement** - 70% unit, 30% integration
+- **Start with core flows** - create, update, delete on Models
+- **Expand later** - add more resources and error cases after the basics
 
 **On Architecture:**
 
@@ -2354,7 +1902,7 @@ Implement full CRUD operations for the Opinions resource:
 - Validate that model_id exists before creating opinion
 - Filter opinions by model_id, sentiment, or date range
 - Add search by content (full-text search)
-- Comprehensive tests (unit + integration)
+- Basic unit tests for create/update/delete
 
 **Acceptance Criteria:**
 
