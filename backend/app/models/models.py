@@ -81,7 +81,7 @@ class ModelResponse(ModelBase):
     id: int
     metadata_: dict | None = None
     created_at: datetime
-    updated_at: datetime
+    updated_at: datetime | None = None
 
 
 # =============================================================================

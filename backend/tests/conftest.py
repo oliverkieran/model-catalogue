@@ -3,22 +3,48 @@ Pytest configuration and shared fixtures
 """
 
 import pytest
+from datetime import date
 from fastapi.testclient import TestClient
+from httpx import AsyncClient, ASGITransport
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlmodel.ext.asyncio.session import AsyncSession
-from app.main import app
+
 from app.config import settings
+from app.main import app
+from app.db.session import get_db
 from app.models.models import Model, Benchmark
-from datetime import date
 
 
 @pytest.fixture
 def client():
-    """
-    Create a test client for the FastAPI application
-    """
+    """FastAPI test client for unit testing endpoints."""
     return TestClient(app)
+
+
+@pytest.fixture
+async def client_with_db(test_session):
+    """
+    Async HTTP test client with overridden database dependency for integration tests.
+
+    This fixture overrides the get_db dependency to use the test_session,
+    ensuring that the API endpoints use the same database session as the test.
+    This allows integration tests to see data created in the test session.
+    """
+
+    async def override_get_db():
+        yield test_session
+
+    app.dependency_overrides[get_db] = override_get_db
+
+    # Use AsyncClient for async tests to share the same event loop
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        yield client
+
+    # Clean up dependency overrides after test
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture
