@@ -76,9 +76,24 @@ uv run uvicorn app.main:app --reload
 
 The API will be available at http://localhost:8000
 
-API documentation (auto-generated): http://localhost:8000/docs
+**Interactive API Documentation:**
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
 
-### Frontend Setup (Coming in Phase 5)
+**Available Endpoints:**
+- `GET /api/v1/models` - List all models with pagination
+- `GET /api/v1/models/{id}` - Get model by ID
+- `GET /api/v1/models/search?q=query` - Search models
+- `POST /api/v1/models` - Create new model
+- `PATCH /api/v1/models/{id}` - Update model
+- `DELETE /api/v1/models/{id}` - Delete model
+- `GET /api/v1/models/{id}/benchmarks` - Get model's benchmark results
+- `GET /api/v1/benchmarks` - List all benchmarks
+- `POST /api/v1/benchmarks` - Create benchmark
+- `GET /api/v1/benchmark-results` - List benchmark results with filtering
+- `POST /api/v1/benchmark-results` - Create benchmark result
+
+### Frontend Setup (Module 5 - Not Yet Implemented)
 
 ```bash
 # Navigate to frontend directory
@@ -100,23 +115,37 @@ The frontend will be available at http://localhost:5173
 cd backend
 uv run pytest
 
-# Run with coverage
+# Run with coverage report
 uv run pytest --cov=app
 
-# Run only fast tests (exclude slow LLM tests)
-uv run pytest -m "not slow"
+# Run only unit tests (fast, mocked)
+uv run pytest -m unit
+
+# Run only integration tests (with real database)
+uv run pytest -m integration
+
+# Run specific test file
+uv run pytest tests/test_repositories.py -v
+
+# Run with verbose output
+uv run pytest -v
 ```
 
 ## 📚 Learning Modules
 
 This project is built following a structured learning path:
 
+### Completed Modules ✅
+
 - **Module 0**: Project Setup (✅ Complete)
 - **Module 1.1**: Database Design & Setup (✅ Complete)
-- **Module 1.2**: SQLAlchemy Models & Repository Pattern (✅ Complete)
-- **Module 2.1**: Pydantic Schemas & API Foundation
-- **Module 2.2**: CRUD Endpoints & Error Handling
-- **Module 3.1**: LLM Service Layer
+- **Module 1.2**: Repository Pattern (✅ Complete)
+- **Module 2.1**: SQLModel Schemas & API Foundation (✅ Complete)
+- **Module 2.2**: CRUD Operations & Error Handling (✅ Complete)
+
+### Next Modules (Planned)
+
+- **Module 3.1**: LLM Integration Basics
 - **Module 3.2**: Manual Input Endpoint
 - **Module 4.1**: RSS Feed Parser & Scheduler
 - **Module 4.2**: Automated Extraction Pipeline
@@ -124,3 +153,18 @@ This project is built following a structured learning path:
 - **Module 6.x**: Deployment & Operations
 
 See `modules/` directory for detailed implementation guides.
+
+## 📊 Current Implementation Status
+
+**Backend (70% complete):**
+- ✅ Database layer with SQLModel models and repositories
+- ✅ Core CRUD API endpoints (Models, Benchmarks, BenchmarkResults)
+- ✅ Request/response validation with Pydantic schemas
+- ✅ Error handling with proper HTTP status codes
+- ✅ Unit and integration tests
+- ⏳ LLM integration (Module 3 - planned)
+- ⏳ RSS feed processing (Module 4 - planned)
+
+**Frontend:** Not yet started (Module 5 - planned)
+
+**Deployment:** Not yet started (Module 6 - planned)

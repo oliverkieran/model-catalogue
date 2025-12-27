@@ -4,7 +4,7 @@
 
 **AI Model Catalogue** - A full-stack web application for tracking AI model performance on benchmarks and aggregating public opinions from various sources. This is a learning project designed to teach software engineering best practices through hands-on implementation.
 
-**Current Status:** Planning phase - implementation not yet started. The project structure and technical architecture are defined in `/conversations/`.
+**Current Status:** Backend API implementation in progress. Core CRUD operations and database layer are complete. Currently completed through Module 2.2 (see `/modules/` for learning materials).
 
 ## Technology Stack
 
@@ -37,7 +37,7 @@
 
 ## Architecture Pattern
 
-### Directory Structure (Planned)
+### Directory Structure
 
 ```
 model-catalogue/
@@ -122,30 +122,34 @@ Use JSONB columns for flexible metadata that may evolve over time.
 
 ## Development Commands
 
-### Backend (when implemented)
+### Backend
 
 ```bash
 # Install dependencies
-uv pip install
+cd backend
+uv sync
 
 # Run development server
-uvicorn app.main:app --reload
+uv run uvicorn app.main:app --reload
 
 # Run tests
-pytest
+uv run pytest
 
 # Run tests with coverage
-pytest --cov=app
+uv run pytest --cov=app
+
+# Run only unit tests (fast)
+uv run pytest -m unit
 
 # Create database migration
-alembic revision --autogenerate -m "description"
+uv run alembic revision --autogenerate -m "description"
 
 # Apply migrations
-alembic upgrade head
+uv run alembic upgrade head
 
 # Run linter/formatter
-ruff check .
-ruff format .
+uv run ruff check .
+uv run ruff format .
 ```
 
 ### Supabase (Local Development - Optional)
@@ -323,19 +327,96 @@ git push origin feat/model-repository
 
 ## Implementation Phases
 
-The project follows a 6-phase implementation plan (see `/conversations/initial-plan.md`):
+The project follows a modular implementation plan with detailed learning modules in `/modules/`:
 
-1. **Phase 0:** Project setup and structure
-2. **Phase 1:** Database layer with SQLModel models and repositories (using Supabase)
-3. **Phase 2:** FastAPI endpoints with SQLModel schemas
-4. **Phase 3:** Manual LLM input processing
-5. **Phase 4:** Automated RSS newsletter ingestion
-6. **Phase 5:** React frontend
-7. **Phase 6:** Docker deployment (simplified - no database container)
+### Completed Modules ✅
 
-When implementing, follow the modular approach: complete one phase before moving to the next, with tests at each stage.
+- **Module 0**: Project Setup (✅ Complete)
+  - Project structure created
+  - Backend dependencies configured with `uv`
+  - Basic FastAPI app scaffolding
 
-**Note on Phase 1:** Instead of setting up a local PostgreSQL container, you'll create a Supabase project and connect to it. SQLModel combines database models and Pydantic schemas into unified definitions, reducing code duplication while teaching the same ORM patterns (it's built on SQLAlchemy).
+- **Module 1.1**: Database Design & Setup (✅ Complete)
+  - Supabase project configured
+  - SQLModel table models defined (Models, Benchmarks, BenchmarkResults, Opinions, UseCases)
+  - Database relationships and constraints implemented
+  - Timestamp mixins and base models
+
+- **Module 1.2**: Repository Pattern (✅ Complete)
+  - `BaseRepository` with generic CRUD operations
+  - Specialized repositories for each entity
+  - Search functionality with filtering
+  - Comprehensive repository tests
+
+- **Module 2.1**: SQLModel Schemas & API Foundation (✅ Complete)
+  - Pydantic schemas (Create, Update, Response) for all entities
+  - GET endpoints for Models and Benchmarks
+  - Pagination and filtering query parameters
+  - API tests with mocked repositories
+
+- **Module 2.2**: CRUD Operations & Error Handling (✅ Complete)
+  - POST, PATCH, DELETE endpoints for Models, Benchmarks, BenchmarkResults
+  - Duplicate checking and validation
+  - Reference validation (foreign keys)
+  - Proper HTTP status codes (201, 404, 409, 422)
+  - Related resource endpoints (`/models/{id}/benchmarks`)
+  - Search endpoints with query-based filtering
+  - Unit tests for CRUD operations
+
+### Next Modules (Planned)
+
+- **Module 3.1**: LLM Integration Basics
+  - Anthropic Claude API integration
+  - Prompt templates for data extraction
+  - LLM response validation and retry logic
+  - Response caching for development
+
+- **Module 3.2**: Manual Input Endpoint
+  - `POST /api/v1/extract` endpoint
+  - Structured data extraction from arbitrary text
+  - Validation and database insertion
+
+- **Module 4.1**: RSS Feed Parser & Scheduler
+  - APScheduler for weekday jobs
+  - RSS feed parsing with feedparser
+  - Scheduled newsletter ingestion
+
+- **Module 4.2**: Automated Extraction Pipeline
+  - End-to-end automated processing
+  - Deduplication logic
+  - Error handling and monitoring
+
+- **Module 5.x**: React Frontend Development
+  - Model catalogue UI
+  - Benchmark visualization
+  - Search and filtering interface
+
+- **Module 6.x**: Deployment & Operations
+  - Docker containerization
+  - VPS deployment
+  - nginx/Caddy reverse proxy
+  - SSL with Let's Encrypt
+
+### Current Implementation Status
+
+**Backend (70% complete):**
+- ✅ Database layer (models, repositories, migrations)
+- ✅ Core CRUD API endpoints (Models, Benchmarks, BenchmarkResults)
+- ✅ Request/response schemas with validation
+- ✅ Error handling and proper HTTP status codes
+- ✅ Unit and integration tests for repositories and API layer
+- ⏳ LLM integration (planned - Module 3)
+- ⏳ RSS feed processing (planned - Module 4)
+- ⏳ Opinions and UseCases CRUD (exercises from Module 2.2)
+
+**Frontend (not started):**
+- ⏳ React application (planned - Module 5)
+- ⏳ Component library setup
+- ⏳ API client integration
+
+**Deployment (not started):**
+- ⏳ Docker configuration (planned - Module 6)
+- ⏳ Production deployment
 
 ## References
 
