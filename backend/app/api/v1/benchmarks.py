@@ -13,7 +13,13 @@ from typing import Sequence
 
 from app.db import get_db
 from app.db.repositories import BenchmarkRepository
-from app.models.models import BenchmarkResponse
+from app.models.models import (
+    Benchmark,
+    BenchmarkCreate,
+    BenchmarkUpdate,
+    BenchmarkResponse,
+    BenchmarkResultResponse,
+)
 
 router = APIRouter(
     prefix="/api/v1/benchmarks",
@@ -80,3 +86,138 @@ async def get_benchmark(
         )
 
     return benchmark
+
+
+@router.post("/", response_model=BenchmarkResponse, status_code=201)
+async def create_benchmark(
+    benchmark_data: BenchmarkCreate,
+    session: AsyncSession = Depends(get_db),
+) -> BenchmarkResponse:
+    """
+    Create a new benchmark.
+
+    Validates that no duplicate benchmark names exist before creation.
+    """
+    repo = BenchmarkRepository(session)
+
+    # Check for duplicate name
+    existing = await repo.get_by_name(benchmark_data.name)
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Benchmark with name '{benchmark_data.name}' already exists",
+        )
+
+    try:
+        new_benchmark = Benchmark(**benchmark_data.model_dump())
+        created = await repo.create(new_benchmark)
+        return created
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to create benchmark: {str(e)}"
+        )
+
+
+@router.patch("/{benchmark_id}", response_model=BenchmarkResponse)
+async def update_benchmark(
+    benchmark_id: int,
+    benchmark_data: BenchmarkUpdate,
+    session: AsyncSession = Depends(get_db),
+) -> BenchmarkResponse:
+    """
+    Update an existing benchmark (partial update).
+    """
+    repo = BenchmarkRepository(session)
+
+    # Check if benchmark exists
+    existing = await repo.get_by_id(benchmark_id)
+    if not existing:
+        raise HTTPException(
+            status_code=404, detail=f"Benchmark with id {benchmark_id} not found"
+        )
+
+    # If updating name, check for duplicates
+    update_dict = benchmark_data.model_dump(exclude_unset=True)
+    if "name" in update_dict and update_dict["name"] != existing.name:
+        duplicate = await repo.get_by_name(update_dict["name"])
+        if duplicate:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Benchmark with name '{update_dict['name']}' already exists",
+            )
+
+    # Apply updates
+    for field, value in update_dict.items():
+        setattr(existing, field, value)
+
+    try:
+        updated = await repo.update(existing)
+        return updated
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to update benchmark: {str(e)}"
+        )
+
+
+@router.delete("/{benchmark_id}", status_code=204)
+async def delete_benchmark(
+    benchmark_id: int,
+    session: AsyncSession = Depends(get_db),
+):
+    """
+    Delete a benchmark by ID.
+
+    Note: This will also delete all associated benchmark results due to cascade delete.
+    """
+    repo = BenchmarkRepository(session)
+
+    # Check if benchmark exists
+    existing = await repo.get_by_id(benchmark_id)
+    if not existing:
+        raise HTTPException(
+            status_code=404, detail=f"Benchmark with id {benchmark_id} not found"
+        )
+
+    try:
+        await repo.delete(benchmark_id)
+        return None
+    except Exception as e:
+        raise HTTPException(
+            status_code=409, detail=f"Cannot delete benchmark: {str(e)}"
+        )
+
+
+################################################
+# Related resource endpoints
+################################################
+
+
+@router.get("/{benchmark_id}/results", response_model=list[BenchmarkResultResponse])
+async def get_benchmark_results(
+    benchmark_id: int,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, le=100),
+    session: AsyncSession = Depends(get_db),
+) -> Sequence[BenchmarkResultResponse]:
+    """
+    Get all results for a specific benchmark across all models.
+
+    Useful for comparing how different models perform on the same benchmark.
+    """
+    # Check if benchmark exists
+    repo = BenchmarkRepository(session)
+    benchmark = await repo.get_by_id(benchmark_id)
+    if not benchmark:
+        raise HTTPException(
+            status_code=404, detail=f"Benchmark with id {benchmark_id} not found"
+        )
+
+    # Get results for this benchmark
+    from app.db.repositories import BenchmarkResultRepository
+
+    result_repo = BenchmarkResultRepository(session)
+    results = await result_repo.get_by_benchmark_id(
+        benchmark_id, skip=skip, limit=limit
+    )
+
+    return results

@@ -24,6 +24,7 @@ from fastapi.testclient import TestClient
 from httpx import AsyncClient
 from unittest.mock import AsyncMock, patch
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+from datetime import date
 
 from app.models.models import Model
 from app.db.repositories import ModelRepository
@@ -151,6 +152,102 @@ class TestModelsEndpointsUnit:
         assert response.status_code == 404
         data = response.json()
         assert "not found" in data["detail"].lower()
+
+    @patch("app.api.v1.models.ModelRepository")
+    def test_create_model_success(
+        self, MockRepo: AsyncMock, client: TestClient, sample_model_data: Model
+    ):
+        """Test creating a new model successfully"""
+        mock_repo_instance = AsyncMock()
+        mock_repo_instance.get_by_name.return_value = None  # No existing model
+        mock_repo_instance.create.return_value = sample_model_data
+        MockRepo.return_value = mock_repo_instance
+
+        # Make request
+        response = client.post(
+            "/api/v1/models/",
+            json={
+                "name": sample_model_data.name,
+                "display_name": sample_model_data.display_name,
+                "organization": sample_model_data.organization,
+                "release_date": sample_model_data.release_date.isoformat(),
+            },
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["id"] == sample_model_data.id
+        assert data["name"] == sample_model_data.name
+        mock_repo_instance.get_by_name.assert_awaited_once_with(sample_model_data.name)
+        mock_repo_instance.create.assert_awaited_once()
+
+    @patch("app.api.v1.models.ModelRepository")
+    def test_update_model_success(
+        self, MockRepo: AsyncMock, client: TestClient, sample_model_data: Model
+    ):
+        """Test updating an existing model successfully"""
+        mock_repo_instance = AsyncMock()
+        mock_repo_instance.get_by_id.return_value = sample_model_data
+        updated_model = sample_model_data
+        updated_model.display_name = "Updated Model Name"
+        mock_repo_instance.update.return_value = updated_model
+        MockRepo.return_value = mock_repo_instance
+
+        response = client.patch(
+            f"/api/v1/models/{sample_model_data.id}",
+            json={"display_name": "Updated Model Name"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["id"] == sample_model_data.id
+        assert data["display_name"] == "Updated Model Name"
+        mock_repo_instance.get_by_id.assert_awaited_once_with(sample_model_data.id)
+        mock_repo_instance.update.assert_awaited_once()
+
+    @patch("app.api.v1.models.ModelRepository")
+    def test_update_model_name_already_exists(
+        self, MockRepo: AsyncMock, client: TestClient, sample_model_data: Model
+    ):
+        """Test updating a model to a name that already exists returns 409"""
+        mock_repo_instance = AsyncMock()
+        mock_repo_instance.get_by_id.return_value = sample_model_data
+        # Simulate another model with the desired name exists
+        mock_repo_instance.get_by_name.return_value = Model(
+            id=999,
+            name="existing-model",
+            display_name="Existing Model",
+            organization="Test Org",
+            release_date=date(2024, 1, 1),
+            created_at=sample_model_data.created_at,
+            updated_at=sample_model_data.updated_at,
+        )
+        MockRepo.return_value = mock_repo_instance
+
+        response = client.patch(
+            f"/api/v1/models/{sample_model_data.id}",
+            json={"name": "existing-model"},
+        )
+
+        assert response.status_code == 409
+        data = response.json()
+        assert "already exists" in data["detail"].lower()
+
+    @patch("app.api.v1.models.ModelRepository")
+    def test_delete_model_success(
+        self, MockRepo: AsyncMock, client: TestClient, sample_model_data: Model
+    ):
+        """Test deleting an existing model successfully"""
+        mock_repo_instance = AsyncMock()
+        mock_repo_instance.get_by_id.return_value = sample_model_data
+        mock_repo_instance.delete.return_value = None
+        MockRepo.return_value = mock_repo_instance
+
+        response = client.delete(f"/api/v1/models/{sample_model_data.id}")
+
+        assert response.status_code == 204
+        mock_repo_instance.get_by_id.assert_awaited_once_with(sample_model_data.id)
+        mock_repo_instance.delete.assert_awaited_once_with(sample_model_data.id)
 
 
 @pytest.mark.integration

@@ -1589,7 +1589,8 @@ class TestModelsCRUDUnit:
             name="test-model",
             display_name="Test Model",
             organization="Test Org",
-            release_date=date(2024, 1, 1)
+            release_date=date(2025, 1, 1),
+            created_at=date(2025, 1, 2)
         )
         mock_repo_instance.create.return_value = created_model
         MockRepo.return_value = mock_repo_instance
@@ -1683,13 +1684,6 @@ uv run pytest tests/api/test_models_crud.py -m unit -v
 ```
 
 **🎯 Checkpoint:** You have lightweight CRUD tests for the Models resource!
-
----
-
-## Next Module Preview: Custom Exception Handlers
-
-We'll cover structured error responses and reusable exception classes in a later
-module once you're comfortable with CRUD flows.
 
 ---
 
