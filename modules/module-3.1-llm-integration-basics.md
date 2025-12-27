@@ -100,7 +100,7 @@ There are many LLMs available (OpenAI's GPT, Google's Gemini, open-source models
 4. **Long context windows** - Handle long documents (200K+ tokens)
 5. **Excellent developer experience** - Clean API, comprehensive docs
 
-**Available Claude Models (as of January 2025):**
+**Available Claude Models (as of December 2025):**
 
 - **Claude Sonnet 4.5** (`claude-sonnet-4-5-20250929`) - Best for complex extraction (recommended for this module)
 - **Claude Haiku 4.5** (`claude-haiku-4-5-20250929`) - Faster, cheaper for simple tasks
@@ -125,9 +125,10 @@ async def extract_data(text: str):
 ```
 
 **Problems:**
+
 - Can't reuse extraction logic in other endpoints
 - Difficult to test (need to mock HTTP requests)
-- Violates Single Responsibility Principle (endpoint does HTTP *and* LLM *and* validation)
+- Violates Single Responsibility Principle (endpoint does HTTP _and_ LLM _and_ validation)
 - Can't swap LLM providers without changing every endpoint
 
 **Professional approach:** Create a **Service Layer**
@@ -148,6 +149,7 @@ async def extract_data(text: str, llm_service: LLMService = Depends()):
 ```
 
 **Benefits:**
+
 - **Separation of Concerns:** Services handle business logic, endpoints handle HTTP
 - **Reusability:** Use `LLMService` in multiple endpoints, scheduled jobs, CLI scripts
 - **Testability:** Mock services easily in tests
@@ -276,7 +278,7 @@ class LLMService:
         self.client = AsyncAnthropic(api_key=self.api_key)
 
         # Default model - Sonnet 4.5 for complex extraction
-        self.model = "claude-sonnet-4-5-20250929"
+        self.model = "claude-sonnet-4-5"
 
     async def close(self):
         """Close the API client. Call this in cleanup/shutdown."""
@@ -307,7 +309,7 @@ Before building extraction, let's understand how Claude's API works. Here's the 
 
 ```python
 response = await client.messages.create(
-    model="claude-sonnet-4-5-20250929",
+    model="claude-sonnet-4-5",
     max_tokens=1024,
     messages=[
         {
@@ -328,36 +330,39 @@ print(response.content[0].text)  # "The model name is GPT-4"
 3. **max_tokens:** Maximum response length (controls cost)
 4. **Response format:** Claude returns a `Message` object with `content` array
 
-For **structured extraction**, we use **tool use** (function calling):
+For **structured extraction**, we use **JSON outputs**:
 
 ```python
-# Define the schema you want Claude to return
-tools = [{
-    "name": "extract_model",
-    "description": "Extract model information from text",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "model_name": {"type": "string"},
-            "score": {"type": "number"}
-        },
-        "required": ["model_name"]
-    }
-}]
+from pydantic import BaseModel
 
-response = await client.messages.create(
-    model="claude-sonnet-4-5-20250929",
+# Define the schema using Pydantic
+class ModelExtraction(BaseModel):
+    model_name: str
+    score: float | None = None
+
+# Use the beta client with structured outputs
+response = await client.beta.messages.parse(
+    model="claude-sonnet-4-5",
     max_tokens=1024,
-    tools=tools,
-    messages=[{"role": "user", "content": "GPT-4 scored 86.5%"}]
+    betas=["structured-outputs-2025-11-13"],
+    messages=[{"role": "user", "content": "GPT-4 scored 86.5%"}],
+    output_format=ModelExtraction,  # Pass Pydantic model directly
 )
 
-# Claude returns structured data matching your schema
-tool_use = response.content[0]
-data = tool_use.input  # {"model_name": "gpt-4", "score": 86.5}
+# Access the parsed, validated output
+data = response.parsed_output  # ModelExtraction(model_name="gpt-4", score=86.5)
 ```
 
-**Important:** With `strict: true` (added in December 2024), Claude **guarantees** the response matches your schema. No more parsing errors!
+**Important:** With structured outputs, Claude **guarantees** the response matches your schema. No more parsing errors!
+
+**Key features:**
+
+- Use `client.beta.messages.parse()` for automatic Pydantic validation
+- Pass Pydantic models directly via `output_format` parameter
+- Response includes `parsed_output` attribute with validated data
+- Requires beta header: `betas=["structured-outputs-2025-11-13"]`
+
+**Note:** `strict: true` is used for **tool use validation** (function calling), not for structured extraction. For extracting structured data from text, use `output_format` as shown above.
 
 ### Step 5: Prompt Engineering for Extraction
 
@@ -366,7 +371,7 @@ Effective prompts are critical. Let's build a prompt for extracting AI model inf
 **Claude 4.5 Best Practices:**
 
 1. **Be explicit and clear:** State exactly what to extract
-2. **Provide context:** Explain *why* you need this data
+2. **Provide context:** Explain _why_ you need this data
 3. **Give 3-5 diverse examples:** Cover edge cases
 4. **Use structured formats:** XML tags, JSON schemas
 5. **Positive framing:** "Do X" not "Don't do Y"
