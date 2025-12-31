@@ -4,7 +4,7 @@
 
 **AI Model Catalogue** - A full-stack web application for tracking AI model performance on benchmarks and aggregating public opinions from various sources. This is a learning project designed to teach software engineering best practices through hands-on implementation.
 
-**Current Status:** Backend API implementation in progress. Core CRUD operations and database layer are complete. Currently completed through Module 2.2 (see `/modules/` for learning materials).
+**Current Status:** Full-stack development in progress. Backend API with CRUD operations is complete, and frontend integration is complete. Currently completed through Module 4 (see `/modules/` for learning materials).
 
 ## Technology Stack
 
@@ -173,23 +173,29 @@ supabase db push
 - **Option A:** Supabase Cloud dev project (simpler, no local database)
 - **Option B:** Local Supabase CLI (recommended, works offline)
 
-### Frontend (when implemented)
+### Frontend
 
 ```bash
+# Navigate to frontend directory
+cd frontend
+
 # Install dependencies
 npm install
 
-# Development server
+# Development server (runs on http://localhost:5173)
 npm run dev
 
 # Build for production
 npm run build
 
-# Run tests
-npm test
+# Preview production build
+npm run preview
 
 # Type checking
 npm run type-check
+
+# Linting
+npm run lint
 ```
 
 ### Docker
@@ -363,9 +369,7 @@ The project follows a modular implementation plan with detailed learning modules
   - Search endpoints with query-based filtering
   - Unit tests for CRUD operations
 
-### Next Modules (Planned)
-
-- **Module 3.1**: LLM Integration Basics
+- **Module 3.1**: LLM Integration Basics (✅ Complete)
   - Anthropic Claude API integration
   - Prompt templates for data extraction
   - LLM response validation and retry logic
@@ -376,22 +380,33 @@ The project follows a modular implementation plan with detailed learning modules
   - Structured data extraction from arbitrary text
   - Validation and database insertion
 
-- **Module 4.1**: RSS Feed Parser & Scheduler
+- **Module 4.1**: Frontend Development (✅ Complete)
+  - React application setup using ai-model-explorer as starting point
+  - TypeScript types matching backend schemas
+  - API client with Axios and interceptors
+  - TanStack Query hooks for data fetching
+  - Replace hardcoded data with real API calls
+  - CORS configuration for local development
+  - Loading states and error handling
+  - Search, filter, and comparison features
+
+### Next Modules (Planned)
+
+- **Module 4.2**: CRUD UI & Form Handling
+  - Create/edit forms for models and benchmarks
+  - Optimistic updates for instant UI feedback
+  - Delete confirmations with proper UX
+  - Form validation matching backend constraints
+  - Admin panel for data management
+
+- **Module 5**: RSS Feed Parser & Scheduler
   - APScheduler for weekday jobs
   - RSS feed parsing with feedparser
   - Scheduled newsletter ingestion
-
-- **Module 4.2**: Automated Extraction Pipeline
-  - End-to-end automated processing
+  - Automated extraction pipeline
   - Deduplication logic
-  - Error handling and monitoring
 
-- **Module 5.x**: React Frontend Development
-  - Model catalogue UI
-  - Benchmark visualization
-  - Search and filtering interface
-
-- **Module 6.x**: Deployment & Operations
+- **Module 6**: Deployment & Operations
   - Docker containerization
   - VPS deployment
   - nginx/Caddy reverse proxy
@@ -399,24 +414,31 @@ The project follows a modular implementation plan with detailed learning modules
 
 ### Current Implementation Status
 
-**Backend (70% complete):**
+**Backend (85% complete):**
 - ✅ Database layer (models, repositories, migrations)
 - ✅ Core CRUD API endpoints (Models, Benchmarks, BenchmarkResults)
 - ✅ Request/response schemas with validation
 - ✅ Error handling and proper HTTP status codes
 - ✅ Unit and integration tests for repositories and API layer
-- ⏳ LLM integration (planned - Module 3)
-- ⏳ RSS feed processing (planned - Module 4)
+- ✅ CORS configuration for frontend integration
+- ✅ LLM integration
+- ⏳ RSS feed processing (planned - Module 5)
 - ⏳ Opinions and UseCases CRUD (exercises from Module 2.2)
 
-**Frontend (not started):**
-- ⏳ React application (planned - Module 5)
-- ⏳ Component library setup
-- ⏳ API client integration
+**Frontend (60% complete):**
+- ✅ React application setup (Vite + TypeScript)
+- ✅ shadcn/ui component library integrated
+- ✅ API client with Axios and error handling
+- ✅ TanStack Query for data fetching and caching
+- ✅ TypeScript types matching backend schemas
+- ✅ Model browsing with search and filtering
+- ✅ Responsive UI with loading/error states
+- ⏳ CRUD forms for creating/editing (planned - Module 4.2)
+- ⏳ Admin panel (planned - Module 4.2)
 
 **Deployment (not started):**
 - ⏳ Docker configuration (planned - Module 6)
-- ⏳ Production deployment
+- ⏳ Production deployment (planned - Module 6)
 
 ## References
 

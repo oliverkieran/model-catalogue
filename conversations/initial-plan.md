@@ -1,5 +1,12 @@
 # **Model Catalogue - Implementation Plan**
 
+> **Note:** This is the original implementation plan. The module order has been adjusted during development:
+> - Module 4 is now **Frontend Development** (completed) instead of RSS Feed Parser
+> - RSS Feed Parser has been moved to Module 6
+> - Module 5 will cover CRUD UI & Form Handling
+>
+> See `/modules/` directory for the actual implemented modules and `CLAUDE.md` for current status.
+
 ## **Project Setup & Best Practices Foundation**
 
 ### **Module 0: Project Initialization**

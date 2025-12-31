@@ -93,7 +93,7 @@ The API will be available at http://localhost:8000
 - `GET /api/v1/benchmark-results` - List benchmark results with filtering
 - `POST /api/v1/benchmark-results` - Create benchmark result
 
-### Frontend Setup (Module 5 - Not Yet Implemented)
+### Frontend Setup
 
 ```bash
 # Navigate to frontend directory
@@ -102,11 +102,19 @@ cd frontend
 # Install dependencies
 npm install
 
+# Copy environment template
+cp .env.example .env
+
+# Edit .env with your configuration
+# VITE_API_BASE_URL=http://localhost:8000
+
 # Start development server
 npm run dev
 ```
 
 The frontend will be available at http://localhost:5173
+
+**Note:** Make sure the backend server is running on port 8000 for the frontend to fetch data.
 
 ## 🧪 Testing
 
@@ -137,34 +145,45 @@ This project is built following a structured learning path:
 
 ### Completed Modules ✅
 
-- **Module 0**: Project Setup (✅ Complete)
-- **Module 1.1**: Database Design & Setup (✅ Complete)
-- **Module 1.2**: Repository Pattern (✅ Complete)
-- **Module 2.1**: SQLModel Schemas & API Foundation (✅ Complete)
-- **Module 2.2**: CRUD Operations & Error Handling (✅ Complete)
+- **Module 0**: Project Setup
+- **Module 1.1**: Database Design & Setup
+- **Module 1.2**: Repository Pattern
+- **Module 2.1**: SQLModel Schemas & API Foundation
+- **Module 2.2**: CRUD Operations & Error Handling
+- **Module 3.1**: LLM Integration Basics
+- **Module 4.1**: Frontend Development
 
 ### Next Modules (Planned)
 
-- **Module 3.1**: LLM Integration Basics
 - **Module 3.2**: Manual Input Endpoint
-- **Module 4.1**: RSS Feed Parser & Scheduler
-- **Module 4.2**: Automated Extraction Pipeline
-- **Module 5.x**: Frontend Development
-- **Module 6.x**: Deployment & Operations
+- **Module 4.2**: CRUD UI & Form Handling
+- **Module 5**: RSS Feed Parser & Scheduler
+- **Module 6**: Deployment & Operations
 
 See `modules/` directory for detailed implementation guides.
 
 ## 📊 Current Implementation Status
 
-**Backend (70% complete):**
+**Backend (85% complete):**
 - ✅ Database layer with SQLModel models and repositories
 - ✅ Core CRUD API endpoints (Models, Benchmarks, BenchmarkResults)
 - ✅ Request/response validation with Pydantic schemas
 - ✅ Error handling with proper HTTP status codes
+- ✅ CORS configuration for frontend integration
 - ✅ Unit and integration tests
-- ⏳ LLM integration (Module 3 - planned)
-- ⏳ RSS feed processing (Module 4 - planned)
+- ✅ LLM integration
+- ⏳ RSS feed processing (Module 5 - planned)
 
-**Frontend:** Not yet started (Module 5 - planned)
+**Frontend (60% complete):**
+- ✅ React 18 + TypeScript setup with Vite
+- ✅ shadcn/ui component library integrated
+- ✅ API client with Axios and error handling
+- ✅ TanStack Query for data fetching and caching
+- ✅ TypeScript types matching backend schemas
+- ✅ Model browsing with search and filtering
+- ✅ Responsive UI with loading/error states
+- ✅ Model comparison feature
+- ⏳ CRUD forms for creating/editing (Module 4.2 - planned)
+- ⏳ Admin panel (Module 4.2 - planned)
 
 **Deployment:** Not yet started (Module 6 - planned)
