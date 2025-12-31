@@ -400,6 +400,10 @@ Extract the following fields:
 - release_date: When it was released (ISO format YYYY-MM-DD)
 - description: Brief description of the model's purpose/capabilities
 - license: License type if mentioned (e.g., "Apache 2.0", "Proprietary")
+- benchmark_resuls: Any benchmark results mentioned (name, score, date_tested)
+- opinions: Any subjective opinions or reviews mentioned
+- use_cases: Common use cases or applications described
+- metadata_: Additional structured information (context_window, pricing, modality, etc.)
 
 Important guidelines:
 - Only extract information explicitly stated in the text
@@ -419,12 +423,16 @@ Output:
   "organization": "OpenAI",
   "release_date": "2023-03-01",
   "description": "A large multimodal model capable of processing both text and images",
-  "license": null
+  "license": null,
+  "benchmark_resuls": null,
+  "opinions": null,
+  "use_cases": null,
+  "metadata_": "modality: text+image->text"
 }
 </example>
 
 <example>
-Input: "Anthropic's Claude 3.5 Sonnet, released June 2024, is licensed under a proprietary license."
+Input: "Anthropic's Claude 3.5 Sonnet, released June 2024, is licensed under a proprietary license. It is praised for its safety features and achieved high scores on reasoning benchmarks such as 83,3% on HellaSwag."
 Output:
 {
   "model_name": "claude-3.5-sonnet",
@@ -432,20 +440,14 @@ Output:
   "organization": "Anthropic",
   "release_date": "2024-06-01",
   "description": null,
-  "license": "Proprietary"
-}
-</example>
-
-<example>
-Input: "LLaMA 2 was open-sourced by Meta in 2023 with improved performance."
-Output:
-{
-  "model_name": "llama-2",
-  "display_name": "LLaMA 2",
-  "organization": "Meta",
-  "release_date": "2023-01-01",
-  "description": "Open-source model with improved performance",
-  "license": "Open Source"
+  "license": "Proprietary",
+  "benchmark_resuls": {
+    "benchmark_name": "HellaSwag",
+    "score": 83.3,
+    "date_tested": null
+  },
+  "opinions": "praised for its safety features",
+  "use_cases": "reasoning tasks",
 }
 </example>
 
@@ -552,7 +554,7 @@ Now let's implement the actual extraction logic. Add to `LLMService`:
 
 ```python
 from anthropic import AsyncAnthropic
-from anthropic.types import ToolParam
+import json
 
 
 class LLMService:
@@ -566,7 +568,7 @@ class LLMService:
         """
         Extract AI model information from unstructured text.
 
-        Uses Claude with structured outputs (strict mode) to guarantee
+        Uses Claude with structured outputs (JSON outputs) to guarantee
         valid JSON responses matching the ExtractedModel schema.
 
         Args:
@@ -583,48 +585,6 @@ class LLMService:
         if not text or not text.strip():
             raise ValueError("Text cannot be empty")
 
-        # Define the extraction tool with strict schema
-        extract_tool: ToolParam = {
-            "name": "extract_model",
-            "description": "Extract AI model information from text",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "model_name": {
-                        "type": ["string", "null"],
-                        "description": "Technical model identifier (lowercase with hyphens)"
-                    },
-                    "display_name": {
-                        "type": ["string", "null"],
-                        "description": "Human-readable model name"
-                    },
-                    "organization": {
-                        "type": ["string", "null"],
-                        "description": "Organization that created the model"
-                    },
-                    "release_date": {
-                        "type": ["string", "null"],
-                        "description": "Release date in ISO format (YYYY-MM-DD)",
-                        "format": "date"
-                    },
-                    "description": {
-                        "type": ["string", "null"],
-                        "description": "Brief description of model capabilities"
-                    },
-                    "license": {
-                        "type": ["string", "null"],
-                        "description": "License type"
-                    },
-                    "metadata_": {
-                        "type": ["object", "null"],
-                        "description": "Additional metadata"
-                    }
-                },
-                "required": []  # All fields optional
-            },
-            "strict": True  # ✨ Strict mode guarantees schema conformance
-        }
-
         # Build system prompt with caching
         system_blocks = [
             {
@@ -638,7 +598,7 @@ class LLMService:
         if not use_cache:
             system_blocks[0].pop("cache_control", None)
 
-        # Call Claude with retry logic
+        # Call Claude with retry logic using structured outputs
         try:
             response = await self._call_claude_with_retry(
                 system=system_blocks,
@@ -648,29 +608,15 @@ class LLMService:
                         "content": f"Extract model information from this text:\n\n{text}"
                     }
                 ],
-                tools=[extract_tool],
-                tool_choice={"type": "tool", "name": "extract_model"}
+                output_format=ExtractedModel  # Pass Pydantic model for structured extraction
             )
         except Exception as e:
             logger.error(f"Failed to extract model data: {e}")
             raise
 
-        # Extract the tool use from response
-        extracted_data = None
-        for content_block in response.content:
-            if content_block.type == "tool_use" and content_block.name == "extract_model":
-                # Claude returns the data in content_block.input
-                raw_data = content_block.input
-
-                # Validate against our Pydantic schema
-                try:
-                    extracted_data = ExtractedModel(**raw_data)
-                except ValidationError as e:
-                    logger.error(f"Extracted data failed validation: {e}")
-                    # With strict mode, this should never happen
-                    # But we handle it gracefully just in case
-                    extracted_data = None
-                break
+        # Access the parsed output directly
+        # With structured outputs, this is guaranteed to match ExtractedModel schema
+        extracted_data = response.parsed_output
 
         # Calculate token usage
         usage = response.usage
@@ -694,11 +640,11 @@ class LLMService:
 
 **Key implementation details:**
 
-1. **Strict mode:** `"strict": True` guarantees valid JSON (no parsing errors)
-2. **Tool choice:** Forces Claude to use our extraction tool
-3. **Prompt caching:** `cache_control` on system prompt reduces costs
-4. **Validation:** Even with strict mode, we validate with Pydantic (defense in depth)
-5. **Token logging:** Track usage for cost monitoring
+1. **Structured outputs:** Uses `output_format=ExtractedModel` for guaranteed valid JSON
+2. **Pydantic model:** Pass Pydantic model directly, no manual schema definition needed
+3. **Prompt caching:** `cache_control` on system prompt reduces costs on repeated calls
+4. **Automatic parsing:** `response.parsed_output` contains validated `ExtractedModel` instance
+5. **Token logging:** Track usage for cost monitoring (including cache hits/misses)
 6. **Error handling:** Clear error messages and logging
 
 ### Step 8: Implement Retry Logic
@@ -709,6 +655,8 @@ Add to `LLMService`:
 
 ```python
 import asyncio
+from typing import Type
+from pydantic import BaseModel
 from anthropic import (
     AsyncAnthropic,
     APIError,
@@ -725,11 +673,10 @@ class LLMService:
         self,
         system: list[dict],
         messages: list[dict],
-        tools: list[ToolParam] | None = None,
-        tool_choice: dict | None = None,
+        output_format: Type[BaseModel] | None = None,
         max_retries: int = 3,
         initial_delay: float = 1.0
-    ) -> Message:
+    ):
         """
         Call Claude API with exponential backoff retry logic.
 
@@ -741,13 +688,12 @@ class LLMService:
         Args:
             system: System prompt blocks
             messages: User/assistant messages
-            tools: Tool definitions for structured output
-            tool_choice: Force Claude to use specific tool
+            output_format: Pydantic model for structured JSON output
             max_retries: Maximum number of retry attempts
             initial_delay: Initial delay in seconds (doubles each retry)
 
         Returns:
-            Claude API response message
+            Claude API response message (with parsed_output if output_format provided)
 
         Raises:
             APIError: If all retries are exhausted
@@ -756,14 +702,24 @@ class LLMService:
 
         for attempt in range(max_retries + 1):
             try:
-                response = await self.client.messages.create(
-                    model=self.model,
-                    max_tokens=4096,
-                    system=system,
-                    messages=messages,
-                    tools=tools,
-                    tool_choice=tool_choice
-                )
+                # Use beta client for structured outputs
+                if output_format:
+                    response = await self.client.beta.messages.parse(
+                        model=self.model,
+                        max_tokens=4096,
+                        betas=["structured-outputs-2025-11-13"],
+                        system=system,
+                        messages=messages,
+                        output_format=output_format
+                    )
+                else:
+                    # Regular message creation without structured outputs
+                    response = await self.client.messages.create(
+                        model=self.model,
+                        max_tokens=4096,
+                        system=system,
+                        messages=messages
+                    )
                 return response
 
             except (RateLimitError, InternalServerError, APIConnectionError) as e:
@@ -913,6 +869,7 @@ import logging
 from datetime import date
 from typing import Any
 
+from typing import Type
 from anthropic import (
     AsyncAnthropic,
     APIError,
@@ -920,8 +877,7 @@ from anthropic import (
     RateLimitError,
     InternalServerError
 )
-from anthropic.types import Message, ToolParam
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field
 
 from app.config import settings
 
@@ -1114,7 +1070,7 @@ class LLMService:
         """
         Extract AI model information from unstructured text.
 
-        Uses Claude with structured outputs (strict mode) to guarantee
+        Uses Claude with structured outputs (JSON outputs) to guarantee
         valid JSON responses matching the ExtractedModel schema.
 
         Args:
@@ -1131,48 +1087,6 @@ class LLMService:
         if not text or not text.strip():
             raise ValueError("Text cannot be empty")
 
-        # Define the extraction tool with strict schema
-        extract_tool: ToolParam = {
-            "name": "extract_model",
-            "description": "Extract AI model information from text",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "model_name": {
-                        "type": ["string", "null"],
-                        "description": "Technical model identifier (lowercase with hyphens)"
-                    },
-                    "display_name": {
-                        "type": ["string", "null"],
-                        "description": "Human-readable model name"
-                    },
-                    "organization": {
-                        "type": ["string", "null"],
-                        "description": "Organization that created the model"
-                    },
-                    "release_date": {
-                        "type": ["string", "null"],
-                        "description": "Release date in ISO format (YYYY-MM-DD)",
-                        "format": "date"
-                    },
-                    "description": {
-                        "type": ["string", "null"],
-                        "description": "Brief description of model capabilities"
-                    },
-                    "license": {
-                        "type": ["string", "null"],
-                        "description": "License type"
-                    },
-                    "metadata_": {
-                        "type": ["object", "null"],
-                        "description": "Additional metadata"
-                    }
-                },
-                "required": []  # All fields optional
-            },
-            "strict": True  # ✨ Strict mode guarantees schema conformance
-        }
-
         # Build system prompt with caching
         system_blocks = [
             {
@@ -1184,7 +1098,7 @@ class LLMService:
         if use_cache:
             system_blocks[0]["cache_control"] = {"type": "ephemeral"}
 
-        # Call Claude with retry logic
+        # Call Claude with retry logic using structured outputs
         try:
             response = await self._call_claude_with_retry(
                 system=system_blocks,
@@ -1194,29 +1108,15 @@ class LLMService:
                         "content": f"Extract model information from this text:\n\n{text}"
                     }
                 ],
-                tools=[extract_tool],
-                tool_choice={"type": "tool", "name": "extract_model"}
+                output_format=ExtractedModel  # Pass Pydantic model for structured extraction
             )
         except Exception as e:
             logger.error(f"Failed to extract model data: {e}")
             raise
 
-        # Extract the tool use from response
-        extracted_data = None
-        for content_block in response.content:
-            if content_block.type == "tool_use" and content_block.name == "extract_model":
-                # Claude returns the data in content_block.input
-                raw_data = content_block.input
-
-                # Validate against our Pydantic schema
-                try:
-                    extracted_data = ExtractedModel(**raw_data)
-                except ValidationError as e:
-                    logger.error(f"Extracted data failed validation: {e}")
-                    # With strict mode, this should never happen
-                    # But we handle it gracefully just in case
-                    extracted_data = None
-                break
+        # Access the parsed output directly
+        # With structured outputs, this is guaranteed to match ExtractedModel schema
+        extracted_data = response.parsed_output
 
         # Calculate token usage
         usage = response.usage
@@ -1241,11 +1141,10 @@ class LLMService:
         self,
         system: list[dict],
         messages: list[dict],
-        tools: list[ToolParam] | None = None,
-        tool_choice: dict | None = None,
+        output_format: Type[BaseModel] | None = None,
         max_retries: int = 3,
         initial_delay: float = 1.0
-    ) -> Message:
+    ):
         """
         Call Claude API with exponential backoff retry logic.
 
@@ -1257,13 +1156,12 @@ class LLMService:
         Args:
             system: System prompt blocks
             messages: User/assistant messages
-            tools: Tool definitions for structured output
-            tool_choice: Force Claude to use specific tool
+            output_format: Pydantic model for structured JSON output
             max_retries: Maximum number of retry attempts
             initial_delay: Initial delay in seconds (doubles each retry)
 
         Returns:
-            Claude API response message
+            Claude API response message (with parsed_output if output_format provided)
 
         Raises:
             APIError: If all retries are exhausted
@@ -1272,14 +1170,24 @@ class LLMService:
 
         for attempt in range(max_retries + 1):
             try:
-                response = await self.client.messages.create(
-                    model=self.model,
-                    max_tokens=4096,
-                    system=system,
-                    messages=messages,
-                    tools=tools,
-                    tool_choice=tool_choice
-                )
+                # Use beta client for structured outputs
+                if output_format:
+                    response = await self.client.beta.messages.parse(
+                        model=self.model,
+                        max_tokens=4096,
+                        betas=["structured-outputs-2025-11-13"],
+                        system=system,
+                        messages=messages,
+                        output_format=output_format
+                    )
+                else:
+                    # Regular message creation without structured outputs
+                    response = await self.client.messages.create(
+                        model=self.model,
+                        max_tokens=4096,
+                        system=system,
+                        messages=messages
+                    )
                 return response
 
             except (RateLimitError, InternalServerError, APIConnectionError) as e:
@@ -1326,9 +1234,7 @@ from datetime import date
 from unittest.mock import AsyncMock, Mock, patch
 from anthropic.types import (
     Message,
-    Usage,
-    ContentBlock,
-    ToolUseBlock
+    Usage
 )
 
 from app.services.llm_service import (
@@ -1348,19 +1254,13 @@ def llm_service():
 @pytest.fixture
 def mock_claude_response():
     """
-    Mock Claude API response for successful extraction.
+    Mock Claude API response for successful extraction with structured outputs.
 
-    Simulates the response structure from Claude's API
-    including tool use and token usage.
+    Simulates the response structure from Claude's beta.messages.parse() API
+    including parsed_output and token usage.
     """
-    def _create_response(extracted_data: dict) -> Message:
-        """Create a mock Message with the given extracted data"""
-
-        # Create tool use block
-        tool_use = Mock(spec=ToolUseBlock)
-        tool_use.type = "tool_use"
-        tool_use.name = "extract_model"
-        tool_use.input = extracted_data
+    def _create_response(extracted_data: dict):
+        """Create a mock response with parsed output"""
 
         # Create usage stats
         usage = Mock(spec=Usage)
@@ -1369,12 +1269,12 @@ def mock_claude_response():
         usage.cache_creation_input_tokens = 0
         usage.cache_read_input_tokens = 0
 
-        # Create message
-        message = Mock(spec=Message)
-        message.content = [tool_use]
-        message.usage = usage
+        # Create mock response with parsed_output attribute
+        response = Mock()
+        response.parsed_output = ExtractedModel(**extracted_data)
+        response.usage = usage
 
-        return message
+        return response
 
     return _create_response
 
