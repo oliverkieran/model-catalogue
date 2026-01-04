@@ -21,7 +21,7 @@ But here's the exciting part: **you haven't actually created any database record
 5. Creates the model in your database via the repository layer
 6. Returns the created model with proper HTTP status codes
 
-This completes your **manual extraction pipeline** - the first of two data ingestion methods (the second being automated RSS processing in Module 4).
+This completes your **manual extraction pipeline** - the first of two data ingestion methods (the second being automated RSS processing in Module 5).
 
 **The journey of a text snippet:**
 
@@ -88,6 +88,7 @@ If both pass, you're ready to proceed!
 Your `LLMService` returns an `ExtractionResult` with extracted data. But consider these scenarios:
 
 **Scenario 1: Duplicate model**
+
 ```python
 # User pastes: "GPT-4 was released by OpenAI..."
 # LLM extracts: model_name="gpt-4"
@@ -95,6 +96,7 @@ Your `LLMService` returns an `ExtractionResult` with extracted data. But conside
 ```
 
 **Scenario 2: Invalid data**
+
 ```python
 # User pastes: "Some random text about dogs..."
 # LLM extracts: model_name="dog-classifier", organization=None
@@ -102,6 +104,7 @@ Your `LLMService` returns an `ExtractionResult` with extracted data. But conside
 ```
 
 **Scenario 3: Schema mismatch**
+
 ```python
 # LLM returns: release_date="March 2023" (string)
 # Database expects: release_date=date(2023, 3, 1) (date object)
@@ -135,6 +138,7 @@ created = await model_repo.create(Model(**model_create.model_dump()))
 ```
 
 Each layer catches different error types:
+
 - **Layer 1**: Type errors (string instead of date)
 - **Layer 2**: Schema conformance (required fields)
 - **Layer 3**: Business rules (no duplicates)
@@ -185,6 +189,7 @@ With multiple operations, errors can occur at any step. Your endpoint must handl
 6. **Database failure** → 500 Internal Server Error
 
 Each error needs:
+
 - Appropriate HTTP status code
 - Clear error message for debugging
 - Logging for monitoring
@@ -469,15 +474,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.db import get_db
-from app.db.repositories import ModelRepository
 from app.services.llm_service import LLMService
 from app.schemas.extraction import ExtractRequest, ExtractResponse
-from app.models import Model
 from app.api.dependencies import get_llm_service
 from app.api.v1.extraction_helpers import (
     convert_extracted_to_create,
     validate_extracted_data,
 )
+from app.api.v1.models import create_model
 
 import logging
 
@@ -510,8 +514,8 @@ async def extract_and_create_model(
     The extraction process:
     1. LLM reads the text and identifies model information
     2. Extracted data is validated against schemas
-    3. System checks for duplicate models
-    4. New model is created in the database
+    3. Converted to ModelCreate schema
+    4. Model is created in the database
     5. Response includes the model and extraction metadata
 
     Args:
@@ -580,31 +584,12 @@ async def extract_and_create_model(
 
     logger.info(f"Extracted model: {model_create.name} by {model_create.organization}")
 
-    # Step 4: Check for duplicate models
-    repo = ModelRepository(session)
-    existing_model = await repo.get_by_name(model_create.name)
+    # Step 4: Create model in database
+    created_model = await create_model(model_data=model_create, session=session)
 
-    if existing_model:
-        logger.warning(f"Duplicate model detected: {model_create.name} (id={existing_model.id})")
-        raise HTTPException(
-            status_code=409,
-            detail=f"Model '{model_create.name}' already exists with ID {existing_model.id}. "
-                   f"Use PATCH /api/v1/models/{existing_model.id} to update it."
-        )
+    logger.info(f"Model created successfully: {created_model.name} (id={created_model.id})")
 
-    # Step 5: Create model in database
-    try:
-        new_model = Model(**model_create.model_dump())
-        created_model = await repo.create(new_model)
-        logger.info(f"Model created successfully: {created_model.name} (id={created_model.id})")
-    except Exception as e:
-        logger.error(f"Database creation failed: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to create model in database: {str(e)}"
-        )
-
-    # Step 6: Build response with metadata
+    # Step 5: Build response with metadata
     return ExtractResponse(
         model=created_model,
         tokens_used=extraction_result.tokens_used,
@@ -672,7 +657,7 @@ cd backend
 uv run uvicorn app.main:app --reload
 ```
 
-**Test with the interactive docs** at http://localhost:8000/docs:
+**Test with the interactive docs** at http://localhost:8000/docs
 
 1. Navigate to `POST /api/v1/extract`
 2. Click "Try it out"
@@ -749,25 +734,28 @@ Expected: `422 Unprocessable Entity` (Pydantic validation fails due to `min_leng
 
 Now create thorough tests for the extraction endpoint.
 
-**Create** `backend/tests/test_extraction_api.py`:
+**Create** `backend/tests/api/test_extraction.py`:
 
 ```python
 """
-Tests for Extraction API Endpoint
+Extraction API Endpoint Tests
 
-Tests the complete extraction pipeline: LLM → validation → database insertion
+Tests the LLM-powered extraction pipeline following the established testing patterns:
+- Unit tests with mocked LLM service
+- Integration tests with real database
+- Helper function tests
 """
 
 import pytest
 from datetime import date
-from unittest.mock import AsyncMock, Mock, patch
-from httpx import AsyncClient, ASGITransport
-from sqlmodel.ext.asyncio.session import AsyncSession
+from fastapi.testclient import TestClient
+from httpx import AsyncClient
+from unittest.mock import AsyncMock, patch
+from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
-from app.main import app
-from app.services.llm_service import ExtractionResult, ExtractedModel
 from app.models import Model
 from app.db.repositories import ModelRepository
+from app.services.llm_service import ExtractionResult, ExtractedModel
 
 
 @pytest.fixture
@@ -788,206 +776,172 @@ def mock_extraction_result():
     )
 
 
-@pytest.mark.asyncio
-class TestExtractEndpoint:
-    """Test POST /api/v1/extract endpoint"""
+@pytest.mark.unit
+class TestExtractionEndpointUnit:
+    """Unit tests for /api/v1/extract endpoint with mocked dependencies"""
 
-    async def test_successful_extraction_and_creation(
-        self, db_session: AsyncSession, mock_extraction_result
+    @patch("app.api.v1.models.ModelRepository")
+    def test_successful_extraction(
+        self,
+        MockRepo: AsyncMock,
+        client: TestClient,
+        mock_extraction_result,
+        sample_model_data: Model,
     ):
-        """Extract model data and create in database"""
+        """Test successful extraction and model creation"""
+        from app.main import app
+        from app.services.llm_service import LLMService
 
-        # Mock LLMService.extract_model_data
-        with patch("app.api.v1.extraction.LLMService") as MockLLMService:
-            mock_service = MockLLMService.return_value
-            mock_service.extract_model_data = AsyncMock(
-                return_value=mock_extraction_result
-            )
+        # Mock LLM service
+        mock_llm_instance = AsyncMock()
+        mock_llm_instance.extract_model_data.return_value = mock_extraction_result
 
+        # Override LLMService dependency
+        app.dependency_overrides[LLMService] = lambda: mock_llm_instance
+
+        # Mock repository (to avoid database access)
+        mock_repo_instance = AsyncMock()
+        mock_repo_instance.get_by_name.return_value = None  # No duplicate
+        mock_repo_instance.create.return_value = sample_model_data
+        MockRepo.return_value = mock_repo_instance
+
+        try:
             # Make request
-            transport = ASGITransport(app=app)
-            async with AsyncClient(transport=transport, base_url="http://test") as client:
-                response = await client.post(
-                    "/api/v1/extract",
-                    json={
-                        "text": "GPT-4 was released by OpenAI in March 2023..."
-                    },
-                )
-
-        # Verify response
-        assert response.status_code == 201
-        data = response.json()
-
-        assert data["model"]["name"] == "gpt-4"
-        assert data["model"]["organization"] == "OpenAI"
-        assert data["model"]["release_date"] == "2023-03-14"
-        assert data["model"]["description"] == "A large multimodal model"
-        assert data["tokens_used"] == 650
-        assert data["llm_model"] == "claude-sonnet-4-5"
-
-        # Verify model was created in database
-        repo = ModelRepository(db_session)
-        created = await repo.get_by_name("gpt-4")
-        assert created is not None
-        assert created.organization == "OpenAI"
-
-
-    async def test_duplicate_model_returns_409(
-        self, db_session: AsyncSession, mock_extraction_result
-    ):
-        """Attempting to create duplicate model returns 409 Conflict"""
-
-        # Create existing model
-        repo = ModelRepository(db_session)
-        existing = Model(
-            name="gpt-4",
-            organization="OpenAI",
-            description="Existing model",
-        )
-        await repo.create(existing)
-
-        # Mock LLM to extract same model
-        with patch("app.api.v1.extraction.LLMService") as MockLLMService:
-            mock_service = MockLLMService.return_value
-            mock_service.extract_model_data = AsyncMock(
-                return_value=mock_extraction_result
+            response = client.post(
+                "/api/v1/extract",
+                json={"text": "GPT-4 was released by OpenAI in March 2023..."},
             )
 
-            transport = ASGITransport(app=app)
-            async with AsyncClient(transport=transport, base_url="http://test") as client:
-                response = await client.post(
-                    "/api/v1/extract",
-                    json={"text": "GPT-4 by OpenAI..."},
-                )
+            # Verify response
+            assert response.status_code == 201
+            data = response.json()
+            assert data["model"]["name"] == sample_model_data.name
+            assert data["model"]["organization"] == sample_model_data.organization
+            assert data["tokens_used"] == 650
+            assert data["llm_model"] == "claude-sonnet-4-5"
 
-        # Verify 409 Conflict
-        assert response.status_code == 409
-        data = response.json()
-        assert "already exists" in data["detail"]
-        assert "PATCH" in data["detail"]  # Suggests update endpoint
+            # Verify mocks were called
+            mock_llm_instance.extract_model_data.assert_awaited_once()
+            mock_repo_instance.get_by_name.assert_awaited_once()
+            mock_repo_instance.create.assert_awaited_once()
+        finally:
+            # Clean up dependency overrides
+            app.dependency_overrides.clear()
 
+    def test_extraction_no_data_found(self, client: TestClient):
+        """Test extraction when no model information is found"""
+        from app.main import app
+        from app.services.llm_service import LLMService
 
-    async def test_no_data_extracted_returns_400(self, db_session: AsyncSession):
-        """LLM finds no model information returns 400"""
-
-        # Mock LLM returning None (no data found)
-        empty_result = ExtractionResult(
+        # Mock LLM returning None
+        mock_llm_instance = AsyncMock()
+        mock_llm_instance.extract_model_data.return_value = ExtractionResult(
             data=None,  # No model found
             tokens_used=200,
             model_used="claude-sonnet-4-5",
         )
 
-        with patch("app.api.v1.extraction.LLMService") as MockLLMService:
-            mock_service = MockLLMService.return_value
-            mock_service.extract_model_data = AsyncMock(return_value=empty_result)
+        # Override LLMService dependency
+        app.dependency_overrides[LLMService] = lambda: mock_llm_instance
 
-            transport = ASGITransport(app=app)
-            async with AsyncClient(transport=transport, base_url="http://test") as client:
-                response = await client.post(
-                    "/api/v1/extract",
-                    json={"text": "This text has no model information"},
-                )
-
-        assert response.status_code == 400
-        data = response.json()
-        assert "No model information could be extracted" in data["detail"]
-
-
-    async def test_empty_text_returns_422(self):
-        """Empty text fails Pydantic validation"""
-
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.post(
+        try:
+            response = client.post(
                 "/api/v1/extract",
-                json={"text": ""},  # Too short (min_length=10)
+                json={"text": "This text has no model information"},
             )
+
+            assert response.status_code == 400
+            data = response.json()
+            assert "No model information could be extracted" in data["detail"]
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_extraction_empty_text_validation(self, client: TestClient):
+        """Test that empty text fails Pydantic validation"""
+        response = client.post(
+            "/api/v1/extract",
+            json={"text": ""},  # Too short (min_length=10)
+        )
 
         assert response.status_code == 422
-        data = response.json()
-        assert "validation error" in data["detail"][0]["type"]
 
+    def test_extraction_llm_error(self, client: TestClient):
+        """Test extraction when LLM service fails"""
+        from app.main import app
+        from app.services.llm_service import LLMService
 
-    async def test_llm_error_returns_500(self, db_session: AsyncSession):
-        """LLM API failure returns 500"""
+        # Mock LLM raising an exception
+        mock_llm_instance = AsyncMock()
+        mock_llm_instance.extract_model_data.side_effect = Exception(
+            "Claude API timeout"
+        )
 
-        with patch("app.api.v1.extraction.LLMService") as MockLLMService:
-            mock_service = MockLLMService.return_value
-            mock_service.extract_model_data = AsyncMock(
-                side_effect=Exception("Claude API timeout")
+        # Override LLMService dependency
+        app.dependency_overrides[LLMService] = lambda: mock_llm_instance
+
+        try:
+            response = client.post(
+                "/api/v1/extract",
+                json={"text": "GPT-4 by OpenAI..."},
             )
 
-            transport = ASGITransport(app=app)
-            async with AsyncClient(transport=transport, base_url="http://test") as client:
-                response = await client.post(
-                    "/api/v1/extract",
-                    json={"text": "GPT-4 by OpenAI..."},
-                )
+            assert response.status_code == 500
+            data = response.json()
+            assert "Failed to extract" in data["detail"]
+        finally:
+            app.dependency_overrides.clear()
 
-        assert response.status_code == 500
-        data = response.json()
-        assert "Failed to extract data" in data["detail"]
+    @patch("app.api.v1.models.ModelRepository")
+    def test_extraction_duplicate_model(
+        self,
+        MockRepo: AsyncMock,
+        client: TestClient,
+        mock_extraction_result,
+        sample_model_data: Model,
+    ):
+        """Test that duplicate model detection works in unit test"""
+        from app.main import app
+        from app.services.llm_service import LLMService
 
+        # Mock LLM service
+        mock_llm_instance = AsyncMock()
+        mock_llm_instance.extract_model_data.return_value = mock_extraction_result
 
-class TestExtractionHelpers:
-    """Test helper functions"""
+        # Override LLMService dependency
+        app.dependency_overrides[LLMService] = lambda: mock_llm_instance
 
-    def test_convert_extracted_to_create(self):
-        """Field mapping works correctly"""
-        from app.api.v1.extraction_helpers import convert_extracted_to_create
+        # Mock repository to return existing model (duplicate)
+        mock_repo_instance = AsyncMock()
+        mock_repo_instance.get_by_name.return_value = sample_model_data
+        MockRepo.return_value = mock_repo_instance
 
-        extracted = ExtractedModel(
-            model_name="llama-2",  # Note: model_name
-            organization="Meta",
-            release_date=date(2023, 7, 18),
-            description="Open source LLM",
-            license="Apache 2.0",
-        )
+        try:
+            response = client.post(
+                "/api/v1/extract",
+                json={"text": "GPT-4 by OpenAI..."},
+            )
 
-        model_create = convert_extracted_to_create(extracted)
-
-        assert model_create.name == "llama-2"  # Mapped to 'name'
-        assert model_create.organization == "Meta"
-        assert model_create.release_date == date(2023, 7, 18)
-        assert model_create.description == "Open source LLM"
-        assert model_create.license == "Apache 2.0"
-
-
-    def test_validate_extracted_data_with_none(self):
-        """Validation raises 400 for None data"""
-        from app.api.v1.extraction_helpers import validate_extracted_data
-        from fastapi import HTTPException
-
-        with pytest.raises(HTTPException) as exc_info:
-            validate_extracted_data(None)
-
-        assert exc_info.value.status_code == 400
-        assert "No model information" in exc_info.value.detail
-
-
-    def test_validate_extracted_data_with_valid(self):
-        """Validation passes for valid data"""
-        from app.api.v1.extraction_helpers import validate_extracted_data
-
-        extracted = ExtractedModel(
-            model_name="gpt-4",
-            organization="OpenAI",
-            release_date=None,  # Optional field
-            description="Test model",
-            license=None,  # Optional field
-        )
-
-        # Should not raise
-        validate_extracted_data(extracted)
+            assert response.status_code == 409
+            data = response.json()
+            assert "already exists" in data["detail"].lower()
+            mock_repo_instance.get_by_name.assert_awaited_once()
+            # create should NOT be called for duplicates
+            mock_repo_instance.create.assert_not_awaited()
+        finally:
+            app.dependency_overrides.clear()
 
 
 @pytest.mark.slow
-@pytest.mark.asyncio
+@pytest.mark.integration
 class TestRealExtractionIntegration:
     """Integration test with real Claude API (marked as slow)"""
 
-    async def test_extract_real_gpt4_text(self, db_session: AsyncSession):
-        """End-to-end test with real LLM API"""
+    async def test_extract_with_real_llm_api(
+        self,
+        client_with_db: AsyncClient,
+        test_session: async_sessionmaker[AsyncSession],
+    ):
+        """End-to-end test with real LLM API (costs ~$0.01)"""
         from app.config import settings
 
         if not settings.anthropic_api_key:
@@ -1001,12 +955,10 @@ class TestRealExtractionIntegration:
         a proprietary license via OpenAI's API.
         """
 
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.post(
-                "/api/v1/extract",
-                json={"text": text},
-            )
+        response = await client_with_db.post(
+            "/api/v1/extract",
+            json={"text": text},
+        )
 
         assert response.status_code == 201
         data = response.json()
@@ -1016,165 +968,21 @@ class TestRealExtractionIntegration:
         assert data["model"]["organization"] == "OpenAI"
         assert data["model"]["release_date"] == "2023-03-14"
         assert "multimodal" in data["model"]["description"].lower()
-        assert data["model"]["license"] == "Proprietary"
         assert data["tokens_used"] > 0
 
         # Clean up - delete created model
-        repo = ModelRepository(db_session)
+        repo = ModelRepository(test_session)
         await repo.delete(data["model"]["id"])
 ```
 
 **Run the tests:**
 
 ```bash
-# Fast tests (mocked LLM)
-uv run pytest tests/test_extraction_api.py::TestExtractEndpoint -v
-
-# Helper function tests
-uv run pytest tests/test_extraction_api.py::TestExtractionHelpers -v
+# Unit tests (fast, mocked LLM)
+uv run pytest tests/api/test_extraction.py::TestExtractionEndpointUnit -v
 
 # Slow test with real API (costs ~$0.01)
-uv run pytest tests/test_extraction_api.py::TestRealExtractionIntegration -v --run-slow
-```
-
-### Step 8: Add pytest Marks Configuration
-
-The tests use `@pytest.mark.slow` for real API tests. Configure pytest to handle this.
-
-**Update** `backend/pytest.ini`:
-
-```ini
-[pytest]
-markers =
-    unit: Unit tests (fast, no external dependencies)
-    slow: Slow tests that hit real external APIs
-    integration: Integration tests with database
-
-# Don't run slow tests by default
-addopts = -m "not slow"
-```
-
-**Running different test suites:**
-
-```bash
-# All fast tests (default)
-uv run pytest
-
-# Include slow tests
-uv run pytest -m ""
-
-# Only slow tests
-uv run pytest -m slow
-
-# Only unit tests
-uv run pytest -m unit
-```
-
----
-
-## Complete Example: Extraction Endpoint in Action
-
-Let's trace a complete request through the system to solidify understanding.
-
-**User request:**
-
-```bash
-POST /api/v1/extract HTTP/1.1
-Content-Type: application/json
-
-{
-  "text": "Gemini 1.5 Pro was announced by Google in February 2024. It features a 1 million token context window and excels at long-document understanding. The model is available via Google's Vertex AI platform under a commercial license."
-}
-```
-
-**Processing flow:**
-
-```python
-# 1. FastAPI receives request, validates ExtractRequest schema
-request = ExtractRequest(text="Gemini 1.5 Pro was announced...")
-
-# 2. Dependency injection provides LLMService instance
-llm_service = get_llm_service()  # Singleton instance
-
-# 3. Extract data using Claude
-extraction_result = await llm_service.extract_model_data(
-    text=request.text,
-    use_cache=True
-)
-# Returns: ExtractionResult(
-#     data=ExtractedModel(
-#         model_name="gemini-1.5-pro",
-#         organization="Google",
-#         release_date=date(2024, 2, 1),
-#         description="Features 1M token context, excels at long docs",
-#         license="Proprietary"
-#     ),
-#     tokens_used=720,
-#     model_used="claude-sonnet-4-5"
-# )
-
-# 4. Validate extraction produced data
-validate_extracted_data(extraction_result.data)  # Passes
-
-# 5. Convert to ModelCreate
-model_create = convert_extracted_to_create(extraction_result.data)
-# Returns: ModelCreate(
-#     name="gemini-1.5-pro",  # Field name mapped!
-#     organization="Google",
-#     ...
-# )
-
-# 6. Check for duplicates
-repo = ModelRepository(session)
-existing = await repo.get_by_name("gemini-1.5-pro")  # None (new model)
-
-# 7. Create in database
-new_model = Model(**model_create.model_dump())
-created = await repo.create(new_model)
-# Returns: Model(id=5, name="gemini-1.5-pro", created_at=..., ...)
-
-# 8. Build response
-response = ExtractResponse(
-    model=created,  # Automatically converts to ModelResponse
-    tokens_used=720,
-    llm_model="claude-sonnet-4-5"
-)
-```
-
-**Response (201 Created):**
-
-```json
-{
-  "model": {
-    "id": 5,
-    "name": "gemini-1.5-pro",
-    "organization": "Google",
-    "release_date": "2024-02-01",
-    "description": "Features 1M token context, excels at long docs",
-    "license": "Proprietary",
-    "created_at": "2025-12-31T14:22:00.000Z",
-    "updated_at": "2025-12-31T14:22:00.000Z"
-  },
-  "tokens_used": 720,
-  "llm_model": "claude-sonnet-4-5"
-}
-```
-
-**Token cost calculation:**
-
-```python
-# Claude Sonnet pricing (December 2025)
-INPUT_COST = $3.00 / 1M tokens
-OUTPUT_COST = $15.00 / 1M tokens
-
-# Breakdown (assuming 600 input, 120 output tokens)
-input_cost = (600 / 1_000_000) * 3.00 = $0.0018
-output_cost = (120 / 1_000_000) * 15.00 = $0.0018
-total_cost = $0.0036  # Less than half a cent per extraction!
-
-# With prompt caching (90% cache hit):
-cache_cost = (60 / 1_000_000) * 0.30 = $0.000018  # Cache reads are 10x cheaper
-total_with_cache = $0.0004  # ~10x cheaper with caching
+uv run pytest tests/api/test_extraction.py::TestRealExtractionIntegration -v -m slow
 ```
 
 ---
@@ -1201,26 +1009,8 @@ Run the complete test suite:
 # Unit tests (fast, mocked)
 uv run pytest tests/test_extraction_api.py::TestExtractEndpoint -v
 
-# Helper function tests
-uv run pytest tests/test_extraction_api.py::TestExtractionHelpers -v
-
 # Integration test with real API (slow, costs ~$0.01)
 uv run pytest tests/test_extraction_api.py::TestRealExtractionIntegration -v -m slow
-```
-
-**Expected output:**
-
-```
-tests/test_extraction_api.py::TestExtractEndpoint::test_successful_extraction_and_creation PASSED
-tests/test_extraction_api.py::TestExtractEndpoint::test_duplicate_model_returns_409 PASSED
-tests/test_extraction_api.py::TestExtractEndpoint::test_no_data_extracted_returns_400 PASSED
-tests/test_extraction_api.py::TestExtractEndpoint::test_empty_text_returns_422 PASSED
-tests/test_extraction_api.py::TestExtractEndpoint::test_llm_error_returns_500 PASSED
-tests/test_extraction_api.py::TestExtractionHelpers::test_convert_extracted_to_create PASSED
-tests/test_extraction_api.py::TestExtractionHelpers::test_validate_extracted_data_with_none PASSED
-tests/test_extraction_api.py::TestExtractionHelpers::test_validate_extracted_data_with_valid PASSED
-
-========== 8 passed in 2.45s ==========
 ```
 
 ### Performance Testing
@@ -1259,11 +1049,13 @@ ab -n 10 -c 1 -p extract_request.json -T application/json \
 **Objective:** Improve error messages with extraction hints.
 
 **Current behavior:**
+
 ```json
-{"detail": "No model information could be extracted from the provided text."}
+{ "detail": "No model information could be extracted from the provided text." }
 ```
 
 **Enhanced behavior:**
+
 ```json
 {
   "detail": "No model information could be extracted from the provided text.",
@@ -1401,6 +1193,7 @@ Return confidence in metadata field.
 ### Pitfall 1: Not Converting Field Names
 
 **Symptom:**
+
 ```python
 # Error: Model has no attribute 'model_name'
 created = await repo.create(Model(**extracted.model_dump()))
@@ -1598,39 +1391,3 @@ Congratulations! You've built a complete manual extraction pipeline. Users can n
 - ✅ Built testable architecture with dependency injection
 - ✅ Validated LLM outputs before database insertion
 - ✅ Monitored token usage for cost awareness
-
-**In Module 4.1 (RSS Feed Parser & Scheduler)**, you'll:
-
-1. Set up APScheduler for weekday cron jobs
-2. Parse RSS feeds with feedparser
-3. Extract newsletter content automatically
-4. Schedule daily model updates
-5. Implement error recovery and monitoring
-
-**Preview of Module 4.1:**
-
-```python
-# Scheduled job that runs Monday-Friday at 9 AM
-@scheduler.scheduled_job("cron", hour=9, day_of_week="mon-fri")
-async def ingest_daily_newsletter():
-    """
-    Fetch RSS feed, extract model updates, insert into database.
-    """
-    # Fetch RSS feed
-    feed = feedparser.parse(settings.rss_feed_url)
-
-    for entry in feed.entries:
-        # Extract text from entry
-        text = f"{entry.title}\n\n{entry.summary}"
-
-        # Use your extraction endpoint logic
-        result = await llm_service.extract_model_data(text)
-
-        # Insert if new model found
-        if result.data:
-            await create_or_update_model(result.data)
-```
-
-This will complete your automated data ingestion pipeline, making your Model Catalogue truly hands-off!
-
-**Optional Challenge:** Before starting Module 4.1, try implementing a simple scheduler yourself. Can you create a script that runs your extraction endpoint on a timer? This will prepare you for the full RSS integration.

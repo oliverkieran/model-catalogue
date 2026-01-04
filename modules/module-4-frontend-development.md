@@ -17,6 +17,7 @@ In this module, we'll take the **ai-model-explorer** repository (a complete Reac
 **Why use ai-model-explorer as a starting point?**
 
 The ai-model-explorer repository already has:
+
 - ✅ **React 18 + TypeScript** - Type-safe component development
 - ✅ **Vite** - Lightning-fast development server
 - ✅ **shadcn/ui** - Beautiful, accessible component library
@@ -28,6 +29,7 @@ The ai-model-explorer repository already has:
 **What we'll change:**
 
 Currently, ai-model-explorer uses **hardcoded data** in `src/data/models.ts`. We'll:
+
 - Replace hardcoded data with **API calls** to your FastAPI backend
 - Adapt data models to match your **backend schemas**
 - Add **CRUD operations** for creating and editing models
@@ -97,24 +99,28 @@ Before we dive into code, let's understand how the pieces fit together.
 ### The Modern React Stack
 
 **React 18** provides:
+
 - Component-based UI development
 - Declarative rendering
 - Virtual DOM for performance
 - Hooks for state and side effects
 
 **TypeScript** adds:
+
 - Type safety at compile time
 - IntelliSense and autocomplete
 - Catch errors before runtime
 - Self-documenting code
 
 **Vite** delivers:
+
 - Instant server start
 - Lightning-fast HMR (Hot Module Replacement)
 - Optimized production builds
 - Native ES modules support
 
 **TanStack Query** handles:
+
 - Data fetching and caching
 - Loading and error states
 - Automatic refetching
@@ -122,6 +128,7 @@ Before we dive into code, let's understand how the pieces fit together.
 - Request deduplication
 
 **shadcn/ui** provides:
+
 - Beautiful, accessible components
 - Customizable with Tailwind
 - Copy-paste component code
@@ -218,7 +225,7 @@ mkdir -p frontend
 
 # Copy ai-model-explorer contents to frontend/
 # Replace with the actual path to your ai-model-explorer repo
-cp -r /Users/taaleol6/Documents/code/ai-model-explorer/* frontend/
+git clone https://github.com/oliverkieran/ai-model-explorer.git frontend
 
 # Navigate to frontend
 cd frontend
@@ -298,12 +305,12 @@ export interface AIModel {
 
 export const models: AIModel[] = [
   {
-    id: 'gpt-4o',
-    name: 'GPT-4o',
-    provider: 'OpenAI',
-    type: 'multimodal',
-    description: 'OpenAI\'s most advanced multimodal model...',
-    releaseDate: '2024-05',
+    id: "gpt-4o",
+    name: "GPT-4o",
+    provider: "OpenAI",
+    type: "multimodal",
+    description: "OpenAI's most advanced multimodal model...",
+    releaseDate: "2024-05",
     // ... hardcoded data
   },
   // ... more hardcoded models
@@ -331,15 +338,15 @@ class ModelResponse(ModelBase):
 
 **Key differences:**
 
-| Frontend | Backend | Notes |
-|----------|---------|-------|
-| `id: string` | `id: int` | Type mismatch |
-| `provider` | `organization` | Different field name |
-| `releaseDate` | `release_date` | Naming convention (camelCase vs snake_case) |
-| `parameters`, `contextWindow`, `pricing` | None | Frontend-only fields (not in DB) |
-| `benchmarks: Benchmark[]` | Relationship | Frontend embeds, backend uses IDs |
-| None | `display_name`, `license`, `metadata_` | Backend has additional fields |
-| None | `created_at`, `updated_at` | Backend has timestamps |
+| Frontend                                 | Backend                                | Notes                                       |
+| ---------------------------------------- | -------------------------------------- | ------------------------------------------- |
+| `id: string`                             | `id: int`                              | Type mismatch                               |
+| `provider`                               | `organization`                         | Different field name                        |
+| `releaseDate`                            | `release_date`                         | Naming convention (camelCase vs snake_case) |
+| `parameters`, `contextWindow`, `pricing` | None                                   | Frontend-only fields (not in DB)            |
+| `benchmarks: Benchmark[]`                | Relationship                           | Frontend embeds, backend uses IDs           |
+| None                                     | `display_name`, `license`, `metadata_` | Backend has additional fields               |
+| None                                     | `created_at`, `updated_at`             | Backend has timestamps                      |
 
 **Two approaches to handle this:**
 
@@ -371,7 +378,7 @@ Create `frontend/src/types/api.ts`:
 // Base Types
 // ============================================================================
 
-export type ModelType = 'language' | 'vision' | 'audio' | 'multimodal';
+export type ModelType = "language" | "vision" | "audio" | "multimodal";
 
 // ============================================================================
 // Model Types
@@ -382,11 +389,11 @@ export interface Model {
   name: string;
   display_name: string;
   organization: string;
-  release_date: string | null;  // ISO date string from API
+  release_date: string | null; // ISO date string from API
   description: string | null;
   license: string | null;
   metadata_: Record<string, any> | null;
-  created_at: string;  // ISO datetime string from API
+  created_at: string; // ISO datetime string from API
   updated_at: string;
 }
 
@@ -447,7 +454,7 @@ export interface BenchmarkResult {
   model_id: number;
   benchmark_id: number;
   score: number;
-  date_tested: string | null;  // ISO date string
+  date_tested: string | null; // ISO date string
   source: string | null;
   notes: string | null;
   created_at: string;
@@ -527,6 +534,7 @@ export interface Model {
 ```
 
 **Backend sends:**
+
 ```json
 {
   "id": 1,
@@ -536,6 +544,7 @@ export interface Model {
 ```
 
 **TypeScript knows:**
+
 - `id` is always a number
 - `release_date` might be null
 - All fields are present (no optional `?`)
@@ -544,16 +553,16 @@ export interface Model {
 
 ```typescript
 export interface ModelCreate {
-  name: string;              // Required
-  display_name: string;      // Required
-  organization: string;      // Required
-  release_date?: string;     // Optional
+  name: string; // Required
+  display_name: string; // Required
+  organization: string; // Required
+  release_date?: string; // Optional
 }
 
 export interface ModelUpdate {
-  name?: string;             // Optional (partial update)
-  display_name?: string;     // Optional
-  organization?: string;     // Optional
+  name?: string; // Optional (partial update)
+  display_name?: string; // Optional
+  organization?: string; // Optional
 }
 ```
 
@@ -585,14 +594,14 @@ export interface BenchmarkResultListParams extends ListParams {
 ```typescript
 // TypeScript validates parameters
 const getResults = (params: BenchmarkResultListParams) => {
-  return api.get('/benchmark-results', { params });
+  return api.get("/benchmark-results", { params });
 };
 
 // ✅ Valid
 getResults({ model_id: 5, limit: 10 });
 
 // ❌ TypeScript error: wrong type
-getResults({ model_id: "5" });  // string instead of number
+getResults({ model_id: "5" }); // string instead of number
 ```
 
 **🎯 Checkpoint:** You have TypeScript types matching your backend schemas.
@@ -615,8 +624,8 @@ npm install axios
 Create `frontend/src/lib/api-client.ts`:
 
 ```typescript
-import axios, { AxiosInstance, AxiosError } from 'axios';
-import type { APIError } from '@/types/api';
+import axios, { AxiosInstance, AxiosError } from "axios";
+import type { APIError } from "@/types/api";
 
 /**
  * API Client for Model Catalogue Backend
@@ -629,13 +638,14 @@ import type { APIError } from '@/types/api';
 
 // Get API base URL from environment variable
 // Defaults to localhost:8000 for development
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
 // Create axios instance with defaults
 export const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
   headers: {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   },
   timeout: 10000, // 10 second timeout
 });
@@ -660,9 +670,10 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError<APIError>) => {
     // Transform error to a consistent format
-    const message = error.response?.data?.detail || error.message || 'An error occurred';
+    const message =
+      error.response?.data?.detail || error.message || "An error occurred";
 
-    console.error('API Error:', {
+    console.error("API Error:", {
       status: error.response?.status,
       message,
       url: error.config?.url,
@@ -681,10 +692,12 @@ export default apiClient;
 ### 1. Environment Variable Configuration
 
 ```typescript
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 ```
 
 **Vite exposes env vars** that start with `VITE_`:
+
 - Development: Uses `http://localhost:8000` (your FastAPI server)
 - Production: Can be overridden with `VITE_API_BASE_URL` env var
 
@@ -698,15 +711,14 @@ VITE_API_BASE_URL=http://localhost:8000
 ### 2. Request Interceptor
 
 ```typescript
-apiClient.interceptors.request.use(
-  (config) => {
-    // Future: Add authentication headers
-    return config;
-  }
-);
+apiClient.interceptors.request.use((config) => {
+  // Future: Add authentication headers
+  return config;
+});
 ```
 
 **Interceptors run before every request:**
+
 - Add auth tokens (when you implement authentication)
 - Add custom headers
 - Log requests (in development)
@@ -725,6 +737,7 @@ apiClient.interceptors.response.use(
 ```
 
 **Centralizes error handling:**
+
 - Extracts `detail` from FastAPI error responses
 - Logs errors for debugging
 - Transforms to consistent Error objects
@@ -760,7 +773,7 @@ Now let's create service functions for each resource (models, benchmarks, benchm
 Create `frontend/src/lib/api/models.ts`:
 
 ```typescript
-import apiClient from '../api-client';
+import apiClient from "../api-client";
 import type {
   Model,
   ModelCreate,
@@ -768,7 +781,7 @@ import type {
   BenchmarkResult,
   ListParams,
   SearchParams,
-} from '@/types/api';
+} from "@/types/api";
 
 /**
  * Models API Service
@@ -776,7 +789,7 @@ import type {
  * Provides functions for interacting with /api/v1/models endpoints
  */
 
-const BASE_PATH = '/api/v1/models';
+const BASE_PATH = "/api/v1/models";
 
 export const modelsApi = {
   /**
@@ -807,14 +820,19 @@ export const modelsApi = {
    * Search models by query
    */
   async search(params: SearchParams): Promise<Model[]> {
-    const response = await apiClient.get<Model[]>(`${BASE_PATH}/search/`, { params });
+    const response = await apiClient.get<Model[]>(`${BASE_PATH}/search/`, {
+      params,
+    });
     return response.data;
   },
 
   /**
    * Get benchmark results for a specific model
    */
-  async getBenchmarks(id: number, params?: ListParams): Promise<BenchmarkResult[]> {
+  async getBenchmarks(
+    id: number,
+    params?: ListParams
+  ): Promise<BenchmarkResult[]> {
     const response = await apiClient.get<BenchmarkResult[]>(
       `${BASE_PATH}/${id}/benchmarks`,
       { params }
@@ -852,7 +870,7 @@ export const modelsApi = {
 Create `frontend/src/lib/api/benchmarks.ts`:
 
 ```typescript
-import apiClient from '../api-client';
+import apiClient from "../api-client";
 import type {
   Benchmark,
   BenchmarkCreate,
@@ -860,9 +878,9 @@ import type {
   BenchmarkResult,
   BenchmarkListParams,
   ListParams,
-} from '@/types/api';
+} from "@/types/api";
 
-const BASE_PATH = '/api/v1/benchmarks';
+const BASE_PATH = "/api/v1/benchmarks";
 
 export const benchmarksApi = {
   async list(params?: BenchmarkListParams): Promise<Benchmark[]> {
@@ -880,7 +898,10 @@ export const benchmarksApi = {
     return response.data;
   },
 
-  async getResults(id: number, params?: ListParams): Promise<BenchmarkResult[]> {
+  async getResults(
+    id: number,
+    params?: ListParams
+  ): Promise<BenchmarkResult[]> {
     const response = await apiClient.get<BenchmarkResult[]>(
       `${BASE_PATH}/${id}/results`,
       { params }
@@ -894,7 +915,10 @@ export const benchmarksApi = {
   },
 
   async update(id: number, data: BenchmarkUpdate): Promise<Benchmark> {
-    const response = await apiClient.patch<Benchmark>(`${BASE_PATH}/${id}`, data);
+    const response = await apiClient.patch<Benchmark>(
+      `${BASE_PATH}/${id}`,
+      data
+    );
     return response.data;
   },
 
@@ -909,19 +933,21 @@ export const benchmarksApi = {
 Create `frontend/src/lib/api/benchmark-results.ts`:
 
 ```typescript
-import apiClient from '../api-client';
+import apiClient from "../api-client";
 import type {
   BenchmarkResult,
   BenchmarkResultCreate,
   BenchmarkResultUpdate,
   BenchmarkResultListParams,
-} from '@/types/api';
+} from "@/types/api";
 
-const BASE_PATH = '/api/v1/benchmark-results';
+const BASE_PATH = "/api/v1/benchmark-results";
 
 export const benchmarkResultsApi = {
   async list(params?: BenchmarkResultListParams): Promise<BenchmarkResult[]> {
-    const response = await apiClient.get<BenchmarkResult[]>(BASE_PATH, { params });
+    const response = await apiClient.get<BenchmarkResult[]>(BASE_PATH, {
+      params,
+    });
     return response.data;
   },
 
@@ -935,8 +961,14 @@ export const benchmarkResultsApi = {
     return response.data;
   },
 
-  async update(id: number, data: BenchmarkResultUpdate): Promise<BenchmarkResult> {
-    const response = await apiClient.patch<BenchmarkResult>(`${BASE_PATH}/${id}`, data);
+  async update(
+    id: number,
+    data: BenchmarkResultUpdate
+  ): Promise<BenchmarkResult> {
+    const response = await apiClient.patch<BenchmarkResult>(
+      `${BASE_PATH}/${id}`,
+      data
+    );
     return response.data;
   },
 
@@ -957,15 +989,15 @@ Create `frontend/src/lib/api/index.ts`:
  * Re-exports all API service modules for convenient importing
  */
 
-export * from './models';
-export * from './benchmarks';
-export * from './benchmark-results';
+export * from "./models";
+export * from "./benchmarks";
+export * from "./benchmark-results";
 ```
 
 **Now you can import easily:**
 
 ```typescript
-import { modelsApi, benchmarksApi } from '@/lib/api';
+import { modelsApi, benchmarksApi } from "@/lib/api";
 
 // Use the APIs
 const models = await modelsApi.list();
@@ -1039,15 +1071,15 @@ TanStack Query (formerly React Query) provides powerful data fetching hooks. Let
 Create `frontend/src/hooks/useModels.ts`:
 
 ```typescript
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { modelsApi } from '@/lib/api';
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { modelsApi } from "@/lib/api";
 import type {
   Model,
   ModelCreate,
   ModelUpdate,
   ListParams,
   SearchParams,
-} from '@/types/api';
+} from "@/types/api";
 
 /**
  * Custom hooks for models data fetching with React Query
@@ -1055,12 +1087,13 @@ import type {
 
 // Query keys for cache management
 export const modelKeys = {
-  all: ['models'] as const,
-  lists: () => [...modelKeys.all, 'list'] as const,
+  all: ["models"] as const,
+  lists: () => [...modelKeys.all, "list"] as const,
   list: (params?: ListParams) => [...modelKeys.lists(), params] as const,
-  details: () => [...modelKeys.all, 'detail'] as const,
+  details: () => [...modelKeys.all, "detail"] as const,
   detail: (id: number) => [...modelKeys.details(), id] as const,
-  search: (params: SearchParams) => [...modelKeys.all, 'search', params] as const,
+  search: (params: SearchParams) =>
+    [...modelKeys.all, "search", params] as const,
 };
 
 /**
@@ -1121,7 +1154,9 @@ export function useUpdateModel() {
       modelsApi.update(id, data),
     onSuccess: (_, variables) => {
       // Invalidate specific model and lists
-      queryClient.invalidateQueries({ queryKey: modelKeys.detail(variables.id) });
+      queryClient.invalidateQueries({
+        queryKey: modelKeys.detail(variables.id),
+      });
       queryClient.invalidateQueries({ queryKey: modelKeys.lists() });
     },
   });
@@ -1149,8 +1184,8 @@ export function useDeleteModel() {
 
 ```typescript
 export const modelKeys = {
-  all: ['models'] as const,
-  lists: () => [...modelKeys.all, 'list'] as const,
+  all: ["models"] as const,
+  lists: () => [...modelKeys.all, "list"] as const,
   list: (params?: ListParams) => [...modelKeys.lists(), params] as const,
   detail: (id: number) => [...modelKeys.details(), id] as const,
 };
@@ -1159,10 +1194,9 @@ export const modelKeys = {
 **Query keys identify cached data:**
 
 ```typescript
-['models']                     // All model-related queries
-['models', 'list']             // All list queries
-['models', 'list', { skip: 0, limit: 20 }]  // Specific list query
-['models', 'detail', 5]        // Model with ID 5
+["models"][("models", "list")][("models", "list", { skip: 0, limit: 20 })][ // All model-related queries // All list queries // Specific list query
+  ("models", "detail", 5)
+]; // Model with ID 5
 ```
 
 **Why this structure?**
@@ -1175,13 +1209,13 @@ export const modelKeys = {
 
 ```typescript
 // Invalidate all model queries
-queryClient.invalidateQueries({ queryKey: ['models'] });
+queryClient.invalidateQueries({ queryKey: ["models"] });
 
 // Invalidate only lists (keeps detail caches)
-queryClient.invalidateQueries({ queryKey: ['models', 'list'] });
+queryClient.invalidateQueries({ queryKey: ["models", "list"] });
 
 // Invalidate specific model
-queryClient.invalidateQueries({ queryKey: ['models', 'detail', 5] });
+queryClient.invalidateQueries({ queryKey: ["models", "detail", 5] });
 ```
 
 ### 2. useQuery Hook
@@ -1207,6 +1241,7 @@ const { data, isLoading, error, refetch } = useModels({ limit: 10 });
 ```
 
 **React Query automatically:**
+
 - Caches results
 - Deduplicates requests
 - Refetches on window focus
@@ -1235,19 +1270,20 @@ const { mutate, isLoading, error } = useCreateModel();
 
 // Create a model
 mutate(
-  { name: 'gpt-5', display_name: 'GPT-5', organization: 'OpenAI' },
+  { name: "gpt-5", display_name: "GPT-5", organization: "OpenAI" },
   {
     onSuccess: (createdModel) => {
-      console.log('Created:', createdModel);
+      console.log("Created:", createdModel);
     },
     onError: (error) => {
-      console.error('Failed:', error);
+      console.error("Failed:", error);
     },
   }
 );
 ```
 
 **Auto-invalidation:**
+
 - After creating a model, `onSuccess` runs
 - Invalidates the models list cache
 - React Query refetches the list automatically
@@ -1266,20 +1302,22 @@ Now let's replace the hardcoded data with API calls.
 Edit `frontend/src/pages/Index.tsx`:
 
 ```typescript
-import { useState, useMemo } from 'react';
-import { Hero } from '@/components/Hero';
-import { FilterBar } from '@/components/FilterBar';
-import { ModelCard } from '@/components/ModelCard';
-import { ModelDetail } from '@/components/ModelDetail';
-import { ComparePanel } from '@/components/ComparePanel';
-import { CompareFloatingBar } from '@/components/CompareFloatingBar';
-import { Helmet } from 'react-helmet-async';
-import { useModels } from '@/hooks/useModels';
-import type { Model } from '@/types/api';
+import { useState, useMemo } from "react";
+import { Hero } from "@/components/Hero";
+import { FilterBar } from "@/components/FilterBar";
+import { ModelCard } from "@/components/ModelCard";
+import { ModelDetail } from "@/components/ModelDetail";
+import { ComparePanel } from "@/components/ComparePanel";
+import { CompareFloatingBar } from "@/components/CompareFloatingBar";
+import { Helmet } from "react-helmet-async";
+import { useModels } from "@/hooks/useModels";
+import type { Model } from "@/types/api";
 
 const Index = () => {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedOrganizations, setSelectedOrganizations] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedOrganizations, setSelectedOrganizations] = useState<string[]>(
+    []
+  );
   const [selectedModel, setSelectedModel] = useState<Model | null>(null);
   const [compareModels, setCompareModels] = useState<Model[]>([]);
   const [isCompareOpen, setIsCompareOpen] = useState(false);
@@ -1295,7 +1333,9 @@ const Index = () => {
       const matchesSearch =
         model.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         model.organization.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (model.description?.toLowerCase() || '').includes(searchQuery.toLowerCase());
+        (model.description?.toLowerCase() || "").includes(
+          searchQuery.toLowerCase()
+        );
 
       const matchesOrganization =
         selectedOrganizations.length === 0 ||
@@ -1332,7 +1372,9 @@ const Index = () => {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center max-w-md">
-          <h2 className="text-2xl font-bold mb-2 text-destructive">Error Loading Models</h2>
+          <h2 className="text-2xl font-bold mb-2 text-destructive">
+            Error Loading Models
+          </h2>
           <p className="text-muted-foreground mb-4">{error.message}</p>
           <button
             onClick={() => window.location.reload()}
@@ -1366,7 +1408,9 @@ const Index = () => {
           <FilterBar
             selectedOrganizations={selectedOrganizations}
             onOrganizationChange={setSelectedOrganizations}
-            organizations={Array.from(new Set(models?.map((m) => m.organization) || []))}
+            organizations={Array.from(
+              new Set(models?.map((m) => m.organization) || [])
+            )}
           />
 
           <div className="mt-12">
@@ -1406,7 +1450,10 @@ const Index = () => {
           </div>
         </section>
 
-        <ModelDetail model={selectedModel} onClose={() => setSelectedModel(null)} />
+        <ModelDetail
+          model={selectedModel}
+          onClose={() => setSelectedModel(null)}
+        />
 
         <CompareFloatingBar
           models={compareModels}
@@ -1416,7 +1463,9 @@ const Index = () => {
 
         <ComparePanel
           models={compareModels}
-          onRemove={(id) => setCompareModels((prev) => prev.filter((m) => m.id !== id))}
+          onRemove={(id) =>
+            setCompareModels((prev) => prev.filter((m) => m.id !== id))
+          }
           onClear={() => setCompareModels([])}
           isOpen={isCompareOpen}
           onOpenChange={setIsCompareOpen}
@@ -1435,13 +1484,14 @@ export default Index;
 
 ```typescript
 // OLD: Import hardcoded data
-import { models } from '@/data/models';
+import { models } from "@/data/models";
 
 // NEW: Fetch from API
 const { data: models, isLoading, error } = useModels({ limit: 100 });
 ```
 
 **Automatic benefits:**
+
 - Data fetched on component mount
 - Loading state handled automatically
 - Errors caught and exposed
@@ -1462,6 +1512,7 @@ if (isLoading) {
 ```
 
 **Professional loading UX:**
+
 - Centered spinner
 - Clear message
 - Branded colors (uses Tailwind theme)
@@ -1473,7 +1524,9 @@ if (isLoading) {
 if (error) {
   return (
     <div className="text-center max-w-md">
-      <h2 className="text-2xl font-bold text-destructive">Error Loading Models</h2>
+      <h2 className="text-2xl font-bold text-destructive">
+        Error Loading Models
+      </h2>
       <p className="text-muted-foreground">{error.message}</p>
       <button onClick={() => window.location.reload()}>Retry</button>
     </div>
@@ -1482,6 +1535,7 @@ if (error) {
 ```
 
 **User-friendly error handling:**
+
 - Shows actual error message (from API)
 - Provides retry action
 - Uses semantic colors (destructive for errors)
@@ -1573,6 +1627,7 @@ Open **http://localhost:5173/** in your browser.
 **Stop the backend server** (Ctrl+C) and refresh the page.
 
 **You should see:**
+
 - Error message: "Network Error" or "Failed to fetch"
 - Retry button
 - No app crash
@@ -1670,6 +1725,7 @@ Before moving forward, practice and extend what you've learned:
 Create a dedicated page for browsing benchmarks:
 
 **Requirements:**
+
 - New route: `/benchmarks`
 - List all benchmarks with categories
 - Filter by category
@@ -1680,6 +1736,7 @@ Create a dedicated page for browsing benchmarks:
 Improve the search performance:
 
 **Requirements:**
+
 - Use `useDeferredValue` or `useDebounce` hook
 - Only search after user stops typing (300ms delay)
 - Show "Searching..." indicator while debouncing
@@ -1690,6 +1747,7 @@ Improve the search performance:
 Create a dedicated page for each model:
 
 **Requirements:**
+
 - Route: `/models/:id`
 - Fetch model with `useModel` hook
 - Show all model details
@@ -1701,6 +1759,7 @@ Create a dedicated page for each model:
 Set up proper environment configuration:
 
 **Requirements:**
+
 - Create `.env.development` and `.env.production`
 - Different API URLs for each environment
 - Add `.env.example` with template

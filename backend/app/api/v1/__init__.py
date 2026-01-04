@@ -7,6 +7,6 @@ Includes:
 - Benchmark Results endpoints: /api/v1/benchmark-results
 """
 
-from . import models, benchmarks, benchmark_results
+from . import models, benchmarks, benchmark_results, extraction_helpers
 
-__all__ = ["models", "benchmarks", "benchmark_results"]
+__all__ = ["models", "benchmarks", "benchmark_results", "extraction_helpers"]
