@@ -210,25 +210,48 @@ ai-model-explorer/
 
 ## Step 1: Setting Up the Frontend Project
 
-Let's copy the ai-model-explorer repository into your project structure.
+Let's copy the ai-model-explorer repository into your project structure. Since both ai-model-explorer and model-catalogue are Git repositories, we'll copy **just the code files** (not the Git history) to avoid nested repository issues.
 
-### Copy the Repository
+### Copy the Repository (Without Git History)
 
-Since you already have the ai-model-explorer repository, we'll copy it to your `frontend/` directory:
+**Why not just clone?** Cloning would create a nested Git repository inside your model-catalogue repo, which causes complications. We want the frontend to be part of your main repository.
 
 ```bash
 # From your model-catalogue directory
-cd /Users/taaleol6/Documents/code/model-catalogue
+cd /Users/oli/Documents/Coding/Web\ Development/model-catalogue
 
-# Create frontend directory if it doesn't exist
-mkdir -p frontend
+# Clone to a temporary location
+git clone https://github.com/oliverkieran/ai-model-explorer.git /tmp/ai-model-explorer
 
-# Copy ai-model-explorer contents to frontend/
-# Replace with the actual path to your ai-model-explorer repo
-git clone https://github.com/oliverkieran/ai-model-explorer.git frontend
+# Copy contents (excluding .git) to your frontend folder
+# Using rsync to exclude the .git directory
+rsync -av --exclude='.git' /tmp/ai-model-explorer/ frontend/
 
-# Navigate to frontend
-cd frontend
+# Clean up temporary clone
+rm -rf /tmp/ai-model-explorer
+
+# Verify the copy worked
+ls frontend/
+```
+
+**What this does:**
+
+- ✅ Copies all source code, configuration files, and assets
+- ✅ Excludes `.git` directory (no nested repository)
+- ✅ Frontend becomes part of your model-catalogue repository
+- ✅ You can commit frontend changes directly to model-catalogue
+
+### Add Frontend to Your Repository
+
+```bash
+# From your model-catalogue directory
+cd /Users/oli/Documents/Coding/Web\ Development/model-catalogue
+
+# Add frontend to git
+git add frontend/
+
+# Commit the frontend initialization
+git commit -m "feat: initialize frontend from ai-model-explorer"
 ```
 
 ### Install Dependencies
