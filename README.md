@@ -77,10 +77,12 @@ uv run uvicorn app.main:app --reload
 The API will be available at http://localhost:8000
 
 **Interactive API Documentation:**
+
 - Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
 
 **Available Endpoints:**
+
 - `GET /api/v1/models` - List all models with pagination
 - `GET /api/v1/models/{id}` - Get model by ID
 - `GET /api/v1/models/search?q=query` - Search models
@@ -151,11 +153,11 @@ This project is built following a structured learning path:
 - **Module 2.1**: SQLModel Schemas & API Foundation
 - **Module 2.2**: CRUD Operations & Error Handling
 - **Module 3.1**: LLM Integration Basics
+- **Module 3.2**: Manual Input Endpoint
 - **Module 4.1**: Frontend Development
 
 ### Next Modules (Planned)
 
-- **Module 3.2**: Manual Input Endpoint
 - **Module 4.2**: CRUD UI & Form Handling
 - **Module 5**: RSS Feed Parser & Scheduler
 - **Module 6**: Deployment & Operations
@@ -165,6 +167,7 @@ See `modules/` directory for detailed implementation guides.
 ## 📊 Current Implementation Status
 
 **Backend (85% complete):**
+
 - ✅ Database layer with SQLModel models and repositories
 - ✅ Core CRUD API endpoints (Models, Benchmarks, BenchmarkResults)
 - ✅ Request/response validation with Pydantic schemas
@@ -174,7 +177,8 @@ See `modules/` directory for detailed implementation guides.
 - ✅ LLM integration
 - ⏳ RSS feed processing (Module 5 - planned)
 
-**Frontend (60% complete):**
+**Frontend (85% complete):**
+
 - ✅ React 18 + TypeScript setup with Vite
 - ✅ shadcn/ui component library integrated
 - ✅ API client with Axios and error handling
@@ -184,7 +188,6 @@ See `modules/` directory for detailed implementation guides.
 - ✅ Responsive UI with loading/error states
 - ✅ Model comparison feature
 - ⏳ CRUD forms for creating/editing (Module 4.2 - planned)
-- ⏳ Admin panel (Module 4.2 - planned)
 
 **Deployment:** Not yet started (Module 6 - planned)
 

@@ -338,29 +338,34 @@ The project follows a modular implementation plan with detailed learning modules
 ### Completed Modules ✅
 
 - **Module 0**: Project Setup (✅ Complete)
+
   - Project structure created
   - Backend dependencies configured with `uv`
   - Basic FastAPI app scaffolding
 
 - **Module 1.1**: Database Design & Setup (✅ Complete)
+
   - Supabase project configured
   - SQLModel table models defined (Models, Benchmarks, BenchmarkResults, Opinions, UseCases)
   - Database relationships and constraints implemented
   - Timestamp mixins and base models
 
 - **Module 1.2**: Repository Pattern (✅ Complete)
+
   - `BaseRepository` with generic CRUD operations
   - Specialized repositories for each entity
   - Search functionality with filtering
   - Comprehensive repository tests
 
 - **Module 2.1**: SQLModel Schemas & API Foundation (✅ Complete)
+
   - Pydantic schemas (Create, Update, Response) for all entities
   - GET endpoints for Models and Benchmarks
   - Pagination and filtering query parameters
   - API tests with mocked repositories
 
 - **Module 2.2**: CRUD Operations & Error Handling (✅ Complete)
+
   - POST, PATCH, DELETE endpoints for Models, Benchmarks, BenchmarkResults
   - Duplicate checking and validation
   - Reference validation (foreign keys)
@@ -370,12 +375,14 @@ The project follows a modular implementation plan with detailed learning modules
   - Unit tests for CRUD operations
 
 - **Module 3.1**: LLM Integration Basics (✅ Complete)
+
   - Anthropic Claude API integration
   - Prompt templates for data extraction
   - LLM response validation and retry logic
   - Response caching for development
 
-- **Module 3.2**: Manual Input Endpoint
+- **Module 3.2**: Manual Input Endpoint (✅ Complete)
+
   - `POST /api/v1/extract` endpoint
   - Structured data extraction from arbitrary text
   - Validation and database insertion
@@ -393,13 +400,14 @@ The project follows a modular implementation plan with detailed learning modules
 ### Next Modules (Planned)
 
 - **Module 4.2**: CRUD UI & Form Handling
+
   - Create/edit forms for models and benchmarks
   - Optimistic updates for instant UI feedback
   - Delete confirmations with proper UX
   - Form validation matching backend constraints
-  - Admin panel for data management
 
 - **Module 5**: RSS Feed Parser & Scheduler
+
   - APScheduler for weekday jobs
   - RSS feed parsing with feedparser
   - Scheduled newsletter ingestion
@@ -415,6 +423,7 @@ The project follows a modular implementation plan with detailed learning modules
 ### Current Implementation Status
 
 **Backend (85% complete):**
+
 - ✅ Database layer (models, repositories, migrations)
 - ✅ Core CRUD API endpoints (Models, Benchmarks, BenchmarkResults)
 - ✅ Request/response schemas with validation
@@ -426,6 +435,7 @@ The project follows a modular implementation plan with detailed learning modules
 - ⏳ Opinions and UseCases CRUD (exercises from Module 2.2)
 
 **Frontend (60% complete):**
+
 - ✅ React application setup (Vite + TypeScript)
 - ✅ shadcn/ui component library integrated
 - ✅ API client with Axios and error handling
@@ -434,9 +444,9 @@ The project follows a modular implementation plan with detailed learning modules
 - ✅ Model browsing with search and filtering
 - ✅ Responsive UI with loading/error states
 - ⏳ CRUD forms for creating/editing (planned - Module 4.2)
-- ⏳ Admin panel (planned - Module 4.2)
 
 **Deployment (not started):**
+
 - ⏳ Docker configuration (planned - Module 6)
 - ⏳ Production deployment (planned - Module 6)
 
