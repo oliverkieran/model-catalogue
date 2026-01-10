@@ -187,3 +187,14 @@ See `modules/` directory for detailed implementation guides.
 - ⏳ Admin panel (Module 4.2 - planned)
 
 **Deployment:** Not yet started (Module 6 - planned)
+
+## Git Hooks
+
+This repo ships a [pre-commit](https://pre-commit.com/) configuration that runs Ruff on any staged files inside `backend/`. To enable the hook locally:
+
+```bash
+uv tool install pre-commit  # or pip install pre-commit
+pre-commit install          # installs the hooks for this repo
+```
+
+After installation, `pre-commit` automatically executes the Ruff hook (powered by `ruff-pre-commit`) before each commit, helping block backend lint regressions.
