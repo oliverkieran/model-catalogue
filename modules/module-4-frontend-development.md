@@ -1731,9 +1731,7 @@ In **Module 5: CRUD UI & Form Handling** (future module), you'll:
 - **Build create/edit forms** for models and benchmarks
 - **Implement optimistic updates** for instant UI feedback
 - **Add delete confirmations** with proper UX
-- **Build admin panel** for data management
 - **Add form validation** matching backend constraints
-- **Implement search with debouncing** for performance
 
 For now, you have a fully functional frontend that displays real data from your backend!
 
