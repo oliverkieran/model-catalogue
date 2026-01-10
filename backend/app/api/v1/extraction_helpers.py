@@ -4,7 +4,6 @@ Extraction Endpoint Helper Functions
 Business logic for the extraction endpoint, separated for testability.
 """
 
-from datetime import date
 from app.services.llm_service import ExtractedModel
 from app.models import ModelCreate
 

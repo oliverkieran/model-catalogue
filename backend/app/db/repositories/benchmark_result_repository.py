@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 from typing import Sequence
 from datetime import date
 
-from app.models.models import BenchmarkResult, Model, Benchmark
+from app.models.models import BenchmarkResult
 from app.db.repository import BaseRepository
 
 

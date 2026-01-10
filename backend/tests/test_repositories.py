@@ -4,7 +4,6 @@ Tests for Repository Pattern Implementation
 Tests all repository classes to ensure CRUD operations work correctly.
 """
 
-import pytest
 from datetime import date
 
 from app.db.repositories import (

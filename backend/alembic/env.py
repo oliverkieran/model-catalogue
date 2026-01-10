@@ -20,10 +20,6 @@ from app.config import settings
 # Import SQLModel for metadata
 from sqlmodel import SQLModel
 
-# Import all models so Alembic can detect them
-# This import will create table creation in metadata
-from app.models import models
-
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config

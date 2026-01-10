@@ -54,29 +54,29 @@ def sample_models():
     """
 
     model1 = Model(
-        name=f"gpt-model-1",
-        display_name=f"GPT Model 1",
+        name="gpt-model-1",
+        display_name="GPT Model 1",
         organization="OpenAI-Test",
         release_date=date(2025, 1, 1),
-        description=f"Test Model Nr. 1",
+        description="Test Model Nr. 1",
         license="Apache 2.0",
         metadata={"context_window": 64000, "pricing": "free"},
     )
     model2 = Model(
-        name=f"claude-model-2",
-        display_name=f"Model 2",
+        name="claude-model-2",
+        display_name="Model 2",
         organization="Anthropic-Test",
         release_date=date(2024, 6, 1),
-        description=f"Test Model Nr. 2",
+        description="Test Model Nr. 2",
         license="Proprietary",
         metadata={"input_modalities": ["text", "images"], "pricing": "free"},
     )
     model3 = Model(
-        name=f"gpt-model-3",
-        display_name=f"GPT Model 3",
+        name="gpt-model-3",
+        display_name="GPT Model 3",
         organization="OpenAI-Test",
         release_date=date(2025, 6, 1),
-        description=f"Test Model Nr. 3",
+        description="Test Model Nr. 3",
         license="Proprietary",
         metadata={"context_window": 128000, "pricing": "expensive"},
     )

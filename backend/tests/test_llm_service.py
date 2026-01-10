@@ -2,19 +2,16 @@ import pytest
 from datetime import date
 from unittest.mock import AsyncMock, Mock, patch
 from anthropic import RateLimitError, BadRequestError
-from anthropic.types import (
-    Message,
-    Usage
-)
+from anthropic.types import Usage
 
 from app.services.llm_service import (
     LLMService,
     ExtractedModel,
     ExtractionResult,
-    SYSTEM_PROMPT
 )
 
 from app.config import settings
+
 
 @pytest.fixture
 def llm_service_mock():
@@ -30,6 +27,7 @@ def mock_claude_response():
     Simulates the response structure from Claude's beta.messages.parse() API
     including parsed_output and token usage.
     """
+
     def _create_response(extracted_data: dict):
         """Create a mock response with parsed output"""
 
@@ -86,8 +84,9 @@ class TestModelExtraction:
         }
 
         with patch.object(
-            llm_service_mock, "_call_claude_with_retry",
-            return_value=mock_claude_response(extracted)
+            llm_service_mock,
+            "_call_claude_with_retry",
+            return_value=mock_claude_response(extracted),
         ):
             result = await llm_service_mock.extract_model_data(
                 "GPT-4 was released by OpenAI in March 2023..."
@@ -103,7 +102,6 @@ class TestModelExtraction:
         assert result.tokens_used == 650  # 500 + 150
         assert result.model_used == "claude-sonnet-4-5"
 
-    
     async def test_extract_partial_model_data(
         self, llm_service_mock, mock_claude_response
     ):
@@ -119,8 +117,9 @@ class TestModelExtraction:
         }
 
         with patch.object(
-            llm_service_mock, "_call_claude_with_retry",
-            return_value=mock_claude_response(extracted)
+            llm_service_mock,
+            "_call_claude_with_retry",
+            return_value=mock_claude_response(extracted),
         ):
             result = await llm_service_mock.extract_model_data(
                 "Claude 3 Sonnet by Anthropic"
@@ -130,7 +129,6 @@ class TestModelExtraction:
         assert result.data.model_name == "claude-sonnet-3"
         assert result.data.organization == "Anthropic"
         assert result.data.release_date is None
-
 
     async def test_extract_empty_text_raises_error(self, llm_service_mock):
         """Empty text raises ValueError"""
@@ -154,12 +152,11 @@ class TestRetryLogic:
 
         result = await llm_service_mock._call_claude_with_retry(
             system=[{"type": "text", "text": "test"}],
-            messages=[{"role": "user", "content": "test"}]
+            messages=[{"role": "user", "content": "test"}],
         )
 
         assert result == mock_response
         assert llm_service_mock.client.messages.create.call_count == 1
-
 
     async def test_rate_limit_retry_success(self, llm_service_mock):
         """Rate limit error triggers retry and succeeds"""
@@ -169,20 +166,19 @@ class TestRetryLogic:
         llm_service_mock.client.messages.create = AsyncMock(
             side_effect=[
                 RateLimitError("Rate limit exceeded", response=Mock(), body=None),
-                mock_response
+                mock_response,
             ]
         )
 
         result = await llm_service_mock._call_claude_with_retry(
             system=[{"type": "text", "text": "test"}],
             messages=[{"role": "user", "content": "test"}],
-            initial_delay=0.01  # Fast retry for tests
+            initial_delay=0.01,  # Fast retry for tests
         )
 
         assert result == mock_response
         assert llm_service_mock.client.messages.create.call_count == 2
 
-    
     async def test_max_retries_exceeded(self, llm_service_mock):
         """Exhausting all retries raises the error"""
         # All calls raise RateLimitError
@@ -194,13 +190,12 @@ class TestRetryLogic:
                 system=[{"type": "text", "text": "test"}],
                 messages=[{"role": "user", "content": "test"}],
                 max_retries=2,
-                initial_delay=0.01
+                initial_delay=0.01,
             )
 
         # Called 3 times: initial + 2 retries
         assert llm_service_mock.client.messages.create.call_count == 3
 
-    
     async def test_non_retryable_error_no_retry(self, llm_service_mock):
         """Non-retryable errors (400, 401) don't trigger retry"""
         error = BadRequestError("Invalid request", response=Mock(), body=None)
@@ -209,19 +204,18 @@ class TestRetryLogic:
         with pytest.raises(BadRequestError):
             await llm_service_mock._call_claude_with_retry(
                 system=[{"type": "text", "text": "test"}],
-                messages=[{"role": "user", "content": "test"}]
+                messages=[{"role": "user", "content": "test"}],
             )
 
         # Only called once - no retry
         assert llm_service_mock.client.messages.create.call_count == 1
-        
+
 
 @pytest.mark.slow
 class TestRealAPIIntegration:
     @pytest.fixture
     def real_llm_service(self):
         """Create LLMService with real API key from settings"""
-        from app.config import settings
 
         if not settings.anthropic_api_key:
             pytest.skip("ANTHROPIC_API_KEY not configured")
