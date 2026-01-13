@@ -13,13 +13,20 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from typing import Sequence
 
 from app.db import get_db
-from app.db.repositories import ModelRepository, BenchmarkResultRepository
+from app.db.repositories import (
+    ModelRepository,
+    BenchmarkResultRepository,
+    OpinionRepository,
+    UseCaseRepository,
+)
 from app.models.models import (
     Model,
     ModelCreate,
     ModelResponse,
     ModelUpdate,
     BenchmarkResultResponse,
+    OpinionResponse,
+    UseCaseResponse,
 )
 
 # Create router with prefix and tags
@@ -310,3 +317,57 @@ async def get_model_benchmarks(
     result_repo = BenchmarkResultRepository(session)
     results = await result_repo.get_by_model_id(model_id, skip=skip, limit=limit)
     return results
+
+
+@router.get("/{model_id}/opinions", response_model=list[OpinionResponse])
+async def get_model_opinions(
+    model_id: int,
+    skip: int = Query(default=0, ge=0, description="Number of records to skip"),
+    limit: int = Query(
+        default=20, ge=1, le=100, description="Maximum number of records to return"
+    ),
+    session: AsyncSession = Depends(get_db),
+) -> Sequence[OpinionResponse]:
+    """
+    Get all opinions for a specific model.
+
+    Returns public opinions collected about this model from various sources.
+    """
+    # First check if model exists
+    model_repo = ModelRepository(session)
+    model = await model_repo.get_by_id(model_id)
+    if not model:
+        raise HTTPException(
+            status_code=404, detail=f"Model with id {model_id} not found"
+        )
+
+    opinion_repo = OpinionRepository(session)
+    opinions = await opinion_repo.get_by_model_id(model_id, limit=limit)
+    return opinions
+
+
+@router.get("/{model_id}/use-cases", response_model=list[UseCaseResponse])
+async def get_model_use_cases(
+    model_id: int,
+    skip: int = Query(default=0, ge=0, description="Number of records to skip"),
+    limit: int = Query(
+        default=20, ge=1, le=100, description="Maximum number of records to return"
+    ),
+    session: AsyncSession = Depends(get_db),
+) -> Sequence[UseCaseResponse]:
+    """
+    Get all use cases for a specific model.
+
+    Returns mentioned use cases for this model from various sources.
+    """
+    # First check if model exists
+    model_repo = ModelRepository(session)
+    model = await model_repo.get_by_id(model_id)
+    if not model:
+        raise HTTPException(
+            status_code=404, detail=f"Model with id {model_id} not found"
+        )
+
+    use_case_repo = UseCaseRepository(session)
+    use_cases = await use_case_repo.get_by_model_id(model_id, limit=limit)
+    return use_cases

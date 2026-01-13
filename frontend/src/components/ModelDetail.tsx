@@ -79,15 +79,13 @@ export function ModelDetail({ model, onClose }: ModelDetailProps) {
             <div className="space-y-2">
               <div className="flex items-center gap-3">
                 <DialogTitle className="text-3xl font-bold">
-                  {model.name}
+                  {model.display_name}
                 </DialogTitle>
                 {/* <Badge variant={model.type} className="text-sm">
                   {typeInfo?.label}
                 </Badge> */}
               </div>
-              <p className="text-lg text-muted-foreground">
-                {model.organization}
-              </p>
+              <p className="text-lg text-muted-foreground">{model.name}</p>
             </div>
             <div className="text-right space-y-1">
               <div className="flex items-center gap-1 text-model-multimodal">

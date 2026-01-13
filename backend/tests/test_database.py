@@ -29,9 +29,9 @@ async def test_all_tables_exist(test_engine):
             result = await conn.run_sync(
                 lambda sync_conn: inspect(sync_conn).has_table(table_name)
             )
-            assert (
-                result is True
-            ), f"Table '{table_name}' does not exist in the database"
+            assert result is True, (
+                f"Table '{table_name}' does not exist in the database"
+            )
 
 
 async def test_models_table_columns(test_engine):

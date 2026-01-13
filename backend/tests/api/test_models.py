@@ -308,9 +308,9 @@ class TestModelsEndpointsIntegration:
         # Verify that page1 and page2 don't overlap
         page1_ids = {model["id"] for model in page1}
         page2_ids = {model["id"] for model in page2}
-        assert page1_ids.isdisjoint(
-            page2_ids
-        ), "Pages should not have overlapping models"
+        assert page1_ids.isdisjoint(page2_ids), (
+            "Pages should not have overlapping models"
+        )
 
     async def test_get_model_by_id_integration(
         self,

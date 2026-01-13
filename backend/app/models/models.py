@@ -201,7 +201,7 @@ class BenchmarkResultResponse(BenchmarkResultBase):
     model_id: int
     benchmark_id: int
     created_at: datetime
-    updated_at: datetime
+    updated_at: datetime | None = None
 
 
 # =============================================================================
@@ -265,7 +265,7 @@ class OpinionResponse(OpinionBase):
     model_id: int
     tags: list[str] | None = None
     created_at: datetime
-    updated_at: datetime
+    updated_at: datetime | None = None
 
 
 # =============================================================================
@@ -317,4 +317,4 @@ class UseCaseResponse(UseCaseBase):
     id: int
     model_id: int
     created_at: datetime
-    updated_at: datetime
+    updated_at: datetime | None = None

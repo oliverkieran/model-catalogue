@@ -91,7 +91,8 @@ async def extract_and_create_model(
     # Step 1: Extract data using LLM
     try:
         extraction_result = await llm_service.extract_model_data(
-            text=request.text, use_cache=True  # Enable caching to reduce costs
+            text=request.text,
+            use_cache=True,  # Enable caching to reduce costs
         )
     except ValueError as e:
         logger.error(f"Extraction validation error: {e}")

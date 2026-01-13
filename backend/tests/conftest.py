@@ -13,7 +13,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.config import settings
 from app.main import app
 from app.db.session import get_db
-from app.models.models import Model, Benchmark
+from app.models.models import Model, Benchmark, Opinion, UseCase
 
 
 @pytest.fixture
@@ -92,6 +92,29 @@ def sample_benchmark():
         category="Reasoning",
         description="A benchmark for testing AI models",
         url="https://example.com/test-bench",
+    )
+
+
+@pytest.fixture
+def sample_opinion():
+    """Sample opinion for testing (requires model_id to be set)"""
+    return Opinion(
+        content="This model is excellent for creative writing tasks.",
+        sentiment="positive",
+        source="Reddit",
+        author="tech_reviewer",
+        date_published=date(2025, 1, 15),
+        tags=["creative-writing", "quality"],
+    )
+
+
+@pytest.fixture
+def sample_use_case():
+    """Sample use case for testing (requires model_id to be set)"""
+    return UseCase(
+        use_case="Code Generation",
+        description="Generating boilerplate code and refactoring existing code.",
+        mentioned_by="Developer Blog",
     )
 
 

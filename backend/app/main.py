@@ -5,7 +5,14 @@ Model Catalogue API - Main Application Entry Point
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.v1 import models, benchmarks, benchmark_results, extraction
+from app.api.v1 import (
+    models,
+    benchmarks,
+    benchmark_results,
+    extraction,
+    opinions,
+    usecases,
+)
 
 VERSION = "0.1.0"
 
@@ -35,6 +42,8 @@ app.include_router(models.router)
 app.include_router(benchmarks.router)
 app.include_router(benchmark_results.router)
 app.include_router(extraction.router)
+app.include_router(opinions.router)
+app.include_router(usecases.router)
 
 
 @app.get("/")
