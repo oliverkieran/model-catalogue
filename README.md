@@ -73,20 +73,6 @@ The API will be available at http://localhost:8000
 - Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
 
-**Available Endpoints:**
-
-- `GET /api/v1/models` - List all models with pagination
-- `GET /api/v1/models/{id}` - Get model by ID
-- `GET /api/v1/models/search?q=query` - Search models
-- `POST /api/v1/models` - Create new model
-- `PATCH /api/v1/models/{id}` - Update model
-- `DELETE /api/v1/models/{id}` - Delete model
-- `GET /api/v1/models/{id}/benchmarks` - Get model's benchmark results
-- `GET /api/v1/benchmarks` - List all benchmarks
-- `POST /api/v1/benchmarks` - Create benchmark
-- `GET /api/v1/benchmark-results` - List benchmark results with filtering
-- `POST /api/v1/benchmark-results` - Create benchmark result
-
 ### Frontend Setup
 
 ```bash
