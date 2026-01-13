@@ -134,7 +134,7 @@ class BenchmarkResponse(BenchmarkBase):
 
     id: int
     created_at: datetime
-    updated_at: datetime
+    updated_at: datetime | None = None
 
 
 # =============================================================================
