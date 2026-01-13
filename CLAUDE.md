@@ -2,9 +2,9 @@
 
 ## Project Overview
 
-**AI Model Catalogue** - A full-stack web application for tracking AI model performance on benchmarks and aggregating public opinions from various sources. This is a learning project designed to teach software engineering best practices through hands-on implementation.
+**AI Model Catalogue** - A full-stack web application for tracking AI model performance on benchmarks and aggregating public opinions from various sources.
 
-**Current Status:** Full-stack development in progress. Backend API with CRUD operations is complete, and frontend integration is complete. Currently completed through Module 4 (see `/modules/` for learning materials).
+**Current Status:** Full-stack development in progress. Backend API with CRUD operations is complete, and frontend integration is complete.
 
 ## Technology Stack
 
@@ -32,8 +32,7 @@
 - **Docker Compose** for backend/frontend orchestration
 - **Supabase Cloud** for managed database (no database container needed)
 - **VPS** deployment target
-- **nginx/Caddy** for reverse proxy
-- **Let's Encrypt** for SSL
+- **nginx** is already running on the VPS for reverse proxy
 
 ## Architecture Pattern
 
@@ -152,27 +151,6 @@ uv run ruff check .
 uv run ruff format .
 ```
 
-### Supabase (Local Development - Optional)
-
-```bash
-# Start local Supabase stack (PostgreSQL + Studio UI)
-supabase start
-
-# Stop local Supabase
-supabase stop
-
-# Reset local database
-supabase db reset
-
-# Push migrations to Supabase (alternative to alembic)
-supabase db push
-```
-
-**Note:** You can develop using either:
-
-- **Option A:** Supabase Cloud dev project (simpler, no local database)
-- **Option B:** Local Supabase CLI (recommended, works offline)
-
 ### Frontend
 
 ```bash
@@ -264,36 +242,9 @@ Mark slow tests (real LLM API calls) with `@pytest.mark.slow` and exclude from d
 
 ## Environment Configuration
 
-Use `.env` files for local development. Required variables:
-
-```bash
-# Supabase Database Connection
-DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres
-
-# Supabase URLs (Optional - only if using Supabase client directly)
-SUPABASE_URL=https://[PROJECT-REF].supabase.co
-SUPABASE_ANON_KEY=eyJ...
-SUPABASE_SERVICE_KEY=eyJ...
-
-# LLM Integration
-ANTHROPIC_API_KEY=sk-ant-...
-
-# RSS Feed
-RSS_FEED_URL=https://...
-
-# API Configuration
-CORS_ORIGINS=http://localhost:5173
-LOG_LEVEL=INFO
-```
+Use `.env` files for local development.
 
 Never commit secrets. Use `.env.example` for templates.
-
-**Getting Supabase Credentials:**
-
-1. Create a project at https://supabase.com
-2. Go to Project Settings → Database
-3. Copy the connection string (set mode to "Session")
-4. Find API keys in Project Settings → API
 
 ## Git Workflow
 
@@ -322,133 +273,11 @@ git push origin feat/model-repository
 - **SQL Injection Prevention:** Use SQLModel ORM (built on SQLAlchemy), never raw SQL with user input
 - **Secrets Management:** Environment variables only, never hardcoded
 - **CORS:** Configure allowed origins explicitly
-- **Rate Limiting:** Consider for public API endpoints (future enhancement)
 
 ## Performance Optimization
 
-- **Database Indexing:** Add indexes on frequently queried fields (model.name, benchmark_results.model_id, opinions.model_id)
-- **Query Optimization:** Use SQLAlchemy's eager loading (`joinedload`, `selectinload`) to avoid N+1 queries (SQLModel uses SQLAlchemy underneath)
 - **Async Operations:** All I/O operations should be async (database with `AsyncSession`, LLM API, RSS fetching)
 - **Response Caching:** Consider caching for read-heavy endpoints (future enhancement)
-
-## Implementation Phases
-
-The project follows a modular implementation plan with detailed learning modules in `/modules/`:
-
-### Completed Modules ✅
-
-- **Module 0**: Project Setup (✅ Complete)
-
-  - Project structure created
-  - Backend dependencies configured with `uv`
-  - Basic FastAPI app scaffolding
-
-- **Module 1.1**: Database Design & Setup (✅ Complete)
-
-  - Supabase project configured
-  - SQLModel table models defined (Models, Benchmarks, BenchmarkResults, Opinions, UseCases)
-  - Database relationships and constraints implemented
-  - Timestamp mixins and base models
-
-- **Module 1.2**: Repository Pattern (✅ Complete)
-
-  - `BaseRepository` with generic CRUD operations
-  - Specialized repositories for each entity
-  - Search functionality with filtering
-  - Comprehensive repository tests
-
-- **Module 2.1**: SQLModel Schemas & API Foundation (✅ Complete)
-
-  - Pydantic schemas (Create, Update, Response) for all entities
-  - GET endpoints for Models and Benchmarks
-  - Pagination and filtering query parameters
-  - API tests with mocked repositories
-
-- **Module 2.2**: CRUD Operations & Error Handling (✅ Complete)
-
-  - POST, PATCH, DELETE endpoints for Models, Benchmarks, BenchmarkResults
-  - Duplicate checking and validation
-  - Reference validation (foreign keys)
-  - Proper HTTP status codes (201, 404, 409, 422)
-  - Related resource endpoints (`/models/{id}/benchmarks`)
-  - Search endpoints with query-based filtering
-  - Unit tests for CRUD operations
-
-- **Module 3.1**: LLM Integration Basics (✅ Complete)
-
-  - Anthropic Claude API integration
-  - Prompt templates for data extraction
-  - LLM response validation and retry logic
-  - Response caching for development
-
-- **Module 3.2**: Manual Input Endpoint (✅ Complete)
-
-  - `POST /api/v1/extract` endpoint
-  - Structured data extraction from arbitrary text
-  - Validation and database insertion
-
-- **Module 4.1**: Frontend Development (✅ Complete)
-  - React application setup using ai-model-explorer as starting point
-  - TypeScript types matching backend schemas
-  - API client with Axios and interceptors
-  - TanStack Query hooks for data fetching
-  - Replace hardcoded data with real API calls
-  - CORS configuration for local development
-  - Loading states and error handling
-  - Search, filter, and comparison features
-
-### Next Modules (Planned)
-
-- **Module 4.2**: CRUD UI & Form Handling
-
-  - Create/edit forms for models and benchmarks
-  - Optimistic updates for instant UI feedback
-  - Delete confirmations with proper UX
-  - Form validation matching backend constraints
-
-- **Module 5**: RSS Feed Parser & Scheduler
-
-  - APScheduler for weekday jobs
-  - RSS feed parsing with feedparser
-  - Scheduled newsletter ingestion
-  - Automated extraction pipeline
-  - Deduplication logic
-
-- **Module 6**: Deployment & Operations
-  - Docker containerization
-  - VPS deployment
-  - nginx/Caddy reverse proxy
-  - SSL with Let's Encrypt
-
-### Current Implementation Status
-
-**Backend (85% complete):**
-
-- ✅ Database layer (models, repositories, migrations)
-- ✅ Core CRUD API endpoints (Models, Benchmarks, BenchmarkResults)
-- ✅ Request/response schemas with validation
-- ✅ Error handling and proper HTTP status codes
-- ✅ Unit and integration tests for repositories and API layer
-- ✅ CORS configuration for frontend integration
-- ✅ LLM integration
-- ⏳ RSS feed processing (planned - Module 5)
-- ⏳ Opinions and UseCases CRUD (exercises from Module 2.2)
-
-**Frontend (60% complete):**
-
-- ✅ React application setup (Vite + TypeScript)
-- ✅ shadcn/ui component library integrated
-- ✅ API client with Axios and error handling
-- ✅ TanStack Query for data fetching and caching
-- ✅ TypeScript types matching backend schemas
-- ✅ Model browsing with search and filtering
-- ✅ Responsive UI with loading/error states
-- ⏳ CRUD forms for creating/editing (planned - Module 4.2)
-
-**Deployment (not started):**
-
-- ⏳ Docker configuration (planned - Module 6)
-- ⏳ Production deployment (planned - Module 6)
 
 ## References
 
@@ -456,6 +285,5 @@ The project follows a modular implementation plan with detailed learning modules
 - Detailed implementation plan: `/conversations/initial-plan.md`
 - FastAPI docs: https://fastapi.tiangolo.com/
 - SQLModel docs: https://sqlmodel.tiangolo.com/
-- SQLAlchemy 2.0 docs: https://docs.sqlalchemy.org/ (SQLModel is built on this)
 - shadcn/ui: https://ui.shadcn.com/
 - Anthropic API docs: https://docs.anthropic.com/

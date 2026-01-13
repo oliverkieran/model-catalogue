@@ -2,15 +2,7 @@
 
 A full-stack web application for tracking AI model performance on academic benchmarks and aggregating public opinions from various sources.
 
-## 🎯 Project Overview
-
-This is a learning project designed to teach full-stack software engineering best practices through hands-on implementation. The application tracks:
-
-- **AI Models**: Names, organizations, release dates, and metadata
-- **Benchmark Results**: Performance scores on academic benchmarks (MMLU, HumanEval, etc.)
-- **Public Opinions**: Sentiment, use cases, and community feedback from various sources
-
-### Key Features
+## Key Features
 
 - 📊 **Model Catalogue**: Browse and search AI models with their benchmark scores
 - 🤖 **LLM-Powered Extraction**: Paste text and automatically extract model information using Claude API
@@ -140,56 +132,6 @@ uv run pytest tests/test_repositories.py -v
 # Run with verbose output
 uv run pytest -v
 ```
-
-## 📚 Learning Modules
-
-This project is built following a structured learning path:
-
-### Completed Modules ✅
-
-- **Module 0**: Project Setup
-- **Module 1.1**: Database Design & Setup
-- **Module 1.2**: Repository Pattern
-- **Module 2.1**: SQLModel Schemas & API Foundation
-- **Module 2.2**: CRUD Operations & Error Handling
-- **Module 3.1**: LLM Integration Basics
-- **Module 3.2**: Manual Input Endpoint
-- **Module 4.1**: Frontend Development
-
-### Next Modules (Planned)
-
-- **Module 4.2**: CRUD UI & Form Handling
-- **Module 5**: RSS Feed Parser & Scheduler
-- **Module 6**: Deployment & Operations
-
-See `modules/` directory for detailed implementation guides.
-
-## 📊 Current Implementation Status
-
-**Backend (85% complete):**
-
-- ✅ Database layer with SQLModel models and repositories
-- ✅ Core CRUD API endpoints (Models, Benchmarks, BenchmarkResults)
-- ✅ Request/response validation with Pydantic schemas
-- ✅ Error handling with proper HTTP status codes
-- ✅ CORS configuration for frontend integration
-- ✅ Unit and integration tests
-- ✅ LLM integration
-- ⏳ RSS feed processing (Module 5 - planned)
-
-**Frontend (85% complete):**
-
-- ✅ React 18 + TypeScript setup with Vite
-- ✅ shadcn/ui component library integrated
-- ✅ API client with Axios and error handling
-- ✅ TanStack Query for data fetching and caching
-- ✅ TypeScript types matching backend schemas
-- ✅ Model browsing with search and filtering
-- ✅ Responsive UI with loading/error states
-- ✅ Model comparison feature
-- ⏳ CRUD forms for creating/editing (Module 4.2 - planned)
-
-**Deployment:** Not yet started (Module 6 - planned)
 
 ## Git Hooks
 
